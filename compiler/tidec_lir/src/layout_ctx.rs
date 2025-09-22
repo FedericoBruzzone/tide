@@ -60,14 +60,5 @@ impl<'a> LayoutCtx<'a> {
                 backend_repr,
             },
         }
-        // HARDCODE FOR TESTING an integer type
-        // TyAndLayout {
-        //     ty,
-        //     layout: Layout {
-        //         size: Size::from_bits(32),
-        //         align: AbiAndPrefAlign::new(4, 4),
-        //         backend_repr: BackendRepr::Scalar(Primitive::I32),
-        //     },
-        // }
     }
 }
