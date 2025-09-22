@@ -94,23 +94,22 @@ pub struct TargetDataLayout {
     /// The endianness of the target architecture.
     pub endianess: Endianess,
 
-    // Integer type alignments
-    pub i1_align: AbiAndPrefAlign,
-    pub i8_align: AbiAndPrefAlign,
-    pub i16_align: AbiAndPrefAlign,
-    pub i32_align: AbiAndPrefAlign,
-    pub i64_align: AbiAndPrefAlign,
-    pub i128_align: AbiAndPrefAlign,
+    // Integer type alignments, for both signed and unsigned integers.
+    pub int1_align: AbiAndPrefAlign,
+    pub int8_align: AbiAndPrefAlign,
+    pub int16_align: AbiAndPrefAlign,
+    pub int32_align: AbiAndPrefAlign,
+    pub int64_align: AbiAndPrefAlign,
+    pub int128_align: AbiAndPrefAlign,
 
     // Floating point type alignments
-    pub f16_align: AbiAndPrefAlign,
-    pub f32_align: AbiAndPrefAlign,
-    pub f64_align: AbiAndPrefAlign,
-    pub f128_align: AbiAndPrefAlign,
+    pub float16_align: AbiAndPrefAlign,
+    pub float32_align: AbiAndPrefAlign,
+    pub float64_align: AbiAndPrefAlign,
+    pub float128_align: AbiAndPrefAlign,
 
     /// The size of pointers in bytes.
-    pub pointer_size: u64,
-
+    pub pointer_size: Size,
     /// The ABI and preferred alignment for pointers.
     pub pointer_align: AbiAndPrefAlign,
 
@@ -130,17 +129,17 @@ impl Default for TargetDataLayout {
     fn default() -> Self {
         TargetDataLayout {
             endianess: Endianess::Big,
-            i1_align: AbiAndPrefAlign::new(8, 8),
-            i8_align: AbiAndPrefAlign::new(8, 8),
-            i16_align: AbiAndPrefAlign::new(16, 16),
-            i32_align: AbiAndPrefAlign::new(32, 32),
-            i64_align: AbiAndPrefAlign::new(32, 64),
-            i128_align: AbiAndPrefAlign::new(32, 64),
-            f16_align: AbiAndPrefAlign::new(16, 16),
-            f32_align: AbiAndPrefAlign::new(32, 32),
-            f64_align: AbiAndPrefAlign::new(64, 64),
-            f128_align: AbiAndPrefAlign::new(128, 128),
-            pointer_size: 64,
+            int1_align: AbiAndPrefAlign::new(8, 8),
+            int8_align: AbiAndPrefAlign::new(8, 8),
+            int16_align: AbiAndPrefAlign::new(16, 16),
+            int32_align: AbiAndPrefAlign::new(32, 32),
+            int64_align: AbiAndPrefAlign::new(32, 64),
+            int128_align: AbiAndPrefAlign::new(32, 64),
+            float16_align: AbiAndPrefAlign::new(16, 16),
+            float32_align: AbiAndPrefAlign::new(32, 32),
+            float64_align: AbiAndPrefAlign::new(64, 64),
+            float128_align: AbiAndPrefAlign::new(128, 128),
+            pointer_size: Size::from_bits(64),
             pointer_align: AbiAndPrefAlign::new(64, 64),
             aggregate_align: AbiAndPrefAlign::new(0, 64),
             vector_align: vec![
@@ -158,6 +157,16 @@ impl TargetDataLayout {
         let target_data_layout = TargetDataLayout::default();
         info!("TargetDataLayout created: {:?}", target_data_layout);
         target_data_layout
+    }
+
+    pub fn pointer_size(&self) -> Size {
+        self.pointer_size
+    }
+
+    pub fn pointer_align(&self, address_space: AddressSpace) -> AbiAndPrefAlign {
+        match address_space {
+            AddressSpace::DATA => self.pointer_align,
+        }
     }
 
     /// For example, for x86_64-unknown-linux-gnu, the data layout string could be:
@@ -179,24 +188,24 @@ impl TargetDataLayout {
         // Add pointer and integer alignments
         s.push_str(&format!(
             "-p:{}:{}:{}",
-            self.pointer_size,
+            self.pointer_size.bytes(),
             self.pointer_align.abi.bytes(),
             self.pointer_align.pref.bytes()
         ));
 
         // Format for integer types
-        s.push_str(&format_align("i1", &self.i1_align));
-        s.push_str(&format_align("i8", &self.i8_align));
-        s.push_str(&format_align("i16", &self.i16_align));
-        s.push_str(&format_align("i32", &self.i32_align));
-        s.push_str(&format_align("i64", &self.i64_align));
-        s.push_str(&format_align("i128", &self.i128_align));
+        s.push_str(&format_align("i1", &self.int1_align));
+        s.push_str(&format_align("i8", &self.int8_align));
+        s.push_str(&format_align("i16", &self.int16_align));
+        s.push_str(&format_align("i32", &self.int32_align));
+        s.push_str(&format_align("i64", &self.int64_align));
+        s.push_str(&format_align("i128", &self.int128_align));
 
         // Format for floating point types
-        s.push_str(&format_align("f16", &self.f16_align));
-        s.push_str(&format_align("f32", &self.f32_align));
-        s.push_str(&format_align("f64", &self.f64_align));
-        s.push_str(&format_align("f128", &self.f128_align));
+        s.push_str(&format_align("f16", &self.float16_align));
+        s.push_str(&format_align("f32", &self.float32_align));
+        s.push_str(&format_align("f64", &self.float64_align));
+        s.push_str(&format_align("f128", &self.float128_align));
 
         // Aggregate alignment
         s.push_str(&format_align("a", &self.aggregate_align));

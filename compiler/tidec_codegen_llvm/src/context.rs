@@ -131,9 +131,8 @@ impl FnAbiOf for CodegenCtx<'_> {
         lir_ty_ctx: &LirCtx,
         lir_ret_and_args: &IdxVec<Local, LocalData>,
     ) -> FnAbi<LirTy> {
-        let layout_ctx = LayoutCtx::new(lir_ty_ctx);
         let argument_of = |ty: LirTy| -> ArgAbi<LirTy> {
-            let layout = layout_ctx.compute_layout(ty);
+            let layout = lir_ty_ctx.layout_of(ty);
             let pass_mode = match layout.backend_repr {
                 BackendRepr::Scalar(_) => PassMode::Direct,
                 BackendRepr::Memory => PassMode::Indirect,
@@ -281,6 +280,12 @@ impl<'ll> CodegenMethods<'ll> for CodegenCtx<'ll> {
                     .write_to_file(&self.ll_module, FileType::Assembly, Path::new(&asm_path))
                     .expect("Failed to write assembly file");
                 debug!("Wrote assembly file to {}", asm_path);
+            }
+            EmitKind::LlvmIr => {
+                let ir_path = format!("{}.ll", self.ll_module.get_name().to_str().unwrap());
+                std::fs::write(&ir_path, self.ll_module.print_to_string().to_string())
+                    .expect("Failed to write LLVM IR file");
+                debug!("Wrote LLVM IR file to {}", ir_path);
             }
         }
     }

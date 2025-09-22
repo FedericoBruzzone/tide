@@ -21,7 +21,7 @@ fn main() {
     debug!("Logging initialized");
 
     // TODO: check valitiy of TideArgs
-    let lir_ctx = LirCtx::new(BackendKind::Llvm, EmitKind::Object);
+    let lir_ctx = LirCtx::new(BackendKind::Llvm, EmitKind::LlvmIr);
 
     // Create a simple main function that returns 0.
     // ```c

@@ -134,3 +134,4 @@ pub enum Primitive {
     /// A pointer type.
     Pointer(AddressSpace),
 }
+
