@@ -282,6 +282,7 @@ pub struct LirUnit {
 pub enum EmitKind {
     Object,
     Assembly,
+    LlvmIr,
 }
 
 #[derive(Debug)]
