@@ -49,7 +49,10 @@ impl<'a> LayoutCtx<'a> {
             LirTy::I32 => scalar(Primitive::I32),
             LirTy::I64 => scalar(Primitive::I64),
             LirTy::I128 => scalar(Primitive::I128),
-            LirTy::Metadata => unimplemented!("Metadata type layout not implemented"),
+            // TODO: Implement layout computation for Metadata types (e.g., for unsized types or trait objects).
+            // Metadata represents type information for unsized types (such as slices or trait objects),
+            // which require special handling for their layout. Support for this will be added in a future release.
+            LirTy::Metadata => unimplemented!("Layout computation for LirTy::Metadata (used for unsized types/trait objects) is not yet supported. See TODO comment for details."),
         };
 
         TyAndLayout {
