@@ -76,7 +76,7 @@ impl<V: std::fmt::Debug> OperandRef<V> {
         }
     }
 
-    pub fn new_const<'a, 'be, B: BuilderMethods<'a, 'be, Value = V>>(
+    pub fn from_const<'a, 'be, B: BuilderMethods<'a, 'be, Value = V>>(
         builder: &mut B,
         const_val: ConstValue,
         lir_ty: LirTy,

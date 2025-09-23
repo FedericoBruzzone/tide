@@ -49,6 +49,15 @@ impl<'a> LayoutCtx<'a> {
             LirTy::I32 => scalar(Primitive::I32),
             LirTy::I64 => scalar(Primitive::I64),
             LirTy::I128 => scalar(Primitive::I128),
+            LirTy::U8 => scalar(Primitive::U8),
+            LirTy::U16 => scalar(Primitive::U16),
+            LirTy::U32 => scalar(Primitive::U32),
+            LirTy::U64 => scalar(Primitive::U64),
+            LirTy::U128 => scalar(Primitive::U128),
+            LirTy::F16 => scalar(Primitive::F16),
+            LirTy::F32 => scalar(Primitive::F32),
+            LirTy::F64 => scalar(Primitive::F64),
+            LirTy::F128 => scalar(Primitive::F128),
             // TODO: Implement layout computation for Metadata types (e.g., for unsized types or trait objects).
             // Metadata represents type information for unsized types (such as slices or trait objects),
             // which require special handling for their layout. Support for this will be added in a future release.

@@ -20,6 +20,15 @@ impl<'ll> BasicTypesUtils<'ll> for LirTy {
             LirTy::I32 => BasicTypeEnum::IntType(ctx.ll_context.i32_type()).into(),
             LirTy::I64 => BasicTypeEnum::IntType(ctx.ll_context.i64_type()).into(),
             LirTy::I128 => BasicTypeEnum::IntType(ctx.ll_context.i128_type()).into(),
+            LirTy::U8 => BasicTypeEnum::IntType(ctx.ll_context.i8_type()).into(),
+            LirTy::U16 => BasicTypeEnum::IntType(ctx.ll_context.i16_type()).into(),
+            LirTy::U32 => BasicTypeEnum::IntType(ctx.ll_context.i32_type()).into(),
+            LirTy::U64 => BasicTypeEnum::IntType(ctx.ll_context.i64_type()).into(),
+            LirTy::U128 => BasicTypeEnum::IntType(ctx.ll_context.i128_type()).into(),
+            LirTy::F16 => BasicTypeEnum::FloatType(ctx.ll_context.f16_type()).into(),
+            LirTy::F32 => BasicTypeEnum::FloatType(ctx.ll_context.f32_type()).into(),
+            LirTy::F64 => BasicTypeEnum::FloatType(ctx.ll_context.f64_type()).into(),
+            LirTy::F128 => BasicTypeEnum::FloatType(ctx.ll_context.f128_type()).into(),
             LirTy::Metadata => BasicMetadataTypeEnum::MetadataType(ctx.ll_context.metadata_type()),
         }
     }
@@ -31,6 +40,15 @@ impl<'ll> BasicTypesUtils<'ll> for LirTy {
             LirTy::I32 => BasicTypeEnum::IntType(ctx.ll_context.i32_type()),
             LirTy::I64 => BasicTypeEnum::IntType(ctx.ll_context.i64_type()),
             LirTy::I128 => BasicTypeEnum::IntType(ctx.ll_context.i128_type()),
+            LirTy::U8 => BasicTypeEnum::IntType(ctx.ll_context.i8_type()).into(),
+            LirTy::U16 => BasicTypeEnum::IntType(ctx.ll_context.i16_type()).into(),
+            LirTy::U32 => BasicTypeEnum::IntType(ctx.ll_context.i32_type()).into(),
+            LirTy::U64 => BasicTypeEnum::IntType(ctx.ll_context.i64_type()).into(),
+            LirTy::U128 => BasicTypeEnum::IntType(ctx.ll_context.i128_type()).into(),
+            LirTy::F16 => BasicTypeEnum::FloatType(ctx.ll_context.f16_type()).into(),
+            LirTy::F32 => BasicTypeEnum::FloatType(ctx.ll_context.f32_type()).into(),
+            LirTy::F64 => BasicTypeEnum::FloatType(ctx.ll_context.f64_type()).into(),
+            LirTy::F128 => BasicTypeEnum::FloatType(ctx.ll_context.f128_type()).into(),
             LirTy::Metadata => panic!("Metadata type cannot be converted to BasicTypeEnum"),
         }
     }

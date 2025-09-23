@@ -42,7 +42,7 @@ fn main() {
     let lir_bodies = IdxVec::from_raw(vec![LirBody {
         metadata: lir_body_metadata,
         ret_and_args: IdxVec::from_raw(vec![LocalData {
-            ty: LirTy::I32,
+            ty: LirTy::F32,
             mutable: false,
         }]),
         locals: IdxVec::new(),
@@ -54,10 +54,15 @@ fn main() {
                 },
                 RValue::Const(ConstOperand::Value(
                     ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
-                        data: 7u128,
-                        size: NonZero::new(4).unwrap(), // 4 bytes for i32
+                        data: 7.7f32.to_bits() as u128,
+                        size: NonZero::new(4).unwrap(), // 4 bytes for f32
                     })),
-                    LirTy::I32,
+                    LirTy::F32,
+                    // ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                    //     data: 7u128,
+                    //     size: NonZero::new(4).unwrap(), // 4 bytes for i32
+                    // })),
+                    // LirTy::I32,
                 )),
             )))],
             terminator: Terminator::Return,
