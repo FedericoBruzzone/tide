@@ -215,7 +215,7 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
                 // and then cast it to a pointer if needed. The same applies to floats.
                 //
                 // Note that, we cannot create an integer of size 128 (e.g., `self.ctx().ll_context.i128_type()`)
-                // because it cannot be cast to a float 32; LLVM rejects such casts beacuse of
+                // because it cannot be cast to a float 32; LLVM rejects such casts because of
                 // "invalid cast opcode". Consequently, the `llval.const_truncate_or_bit_cast(llty.into_int_type()).into()` method
                 // also would fail due to llty being a float type.
                 let base_int = self.ctx.ll_context.custom_width_int_type(bitsize as u32);
