@@ -42,9 +42,24 @@ impl Size {
         Size(bits / 8 + (bits % 8).div_ceil(8))
     }
 
+    #[inline]
     /// Returns the size in bytes.
     pub fn bytes(&self) -> u64 {
         self.0
+    }
+
+    #[inline]
+    /// Returns the size in bits.
+    pub fn bits(&self) -> u64 {
+        #[cold]
+        // `cold` because this should never happen in practice.
+        fn overflow(bytes: u64) -> ! {
+            panic!("Size::bits: {bytes} bytes in bits doesn't fit in u64")
+        }
+
+        self.bytes()
+            .checked_mul(8)
+            .unwrap_or_else(|| overflow(self.bytes()))
     }
 }
 

@@ -139,7 +139,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     ) -> OperandRef<B::Value> {
         match rvalue {
             RValue::Const(const_operand) => {
-                OperandRef::new_const(builder, const_operand.value(), const_operand.ty())
+                OperandRef::from_const(builder, const_operand.value(), const_operand.ty())
             }
         }
     }

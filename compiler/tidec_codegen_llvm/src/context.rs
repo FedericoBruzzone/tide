@@ -16,7 +16,6 @@ use inkwell::OptimizationLevel;
 use tidec_abi::calling_convention::function::{ArgAbi, FnAbi, PassMode};
 use tidec_abi::layout::{BackendRepr, TyAndLayout};
 use tidec_codegen_ssa::lir;
-use tidec_lir::layout_ctx::LayoutCtx;
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
 

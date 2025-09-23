@@ -200,24 +200,34 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
         assert!(matches!(ty_layout.backend_repr, BackendRepr::Scalar(_)));
         let llty = ty_layout.ty.into_basic_type(self.ctx);
         let be_repr = ty_layout.backend_repr.to_primitive();
+        let bitsize = if ty_layout.is_bool() {
+            1
+        } else {
+            ty_layout.size.bits()
+        };
 
         match const_scalar {
             /* TODO: ConstScalar::Ptr(...) */
             ConstScalar::Value(raw_scalar_value) => {
                 let bits = raw_scalar_value.to_bits(ty_layout.size);
-                // TODO: Consider moving i128_type method to ctx
-                let int_128 = self.ctx().ll_context.i128_type();
+                // Create an LLVM integer type with the appropriate bit size.
+                // Here, even if the llty is a pointer, we create an integer type to hold the bits
+                // and then cast it to a pointer if needed. The same applies to floats.
                 //
+                // Note that, we cannot create an integer of size 128 (e.g., `self.ctx().ll_context.i128_type()`)
+                // because it cannot be cast to a float 32; LLVM rejects such casts beacuse of
+                // "invalid cast opcode". Consequently, the `llval.const_truncate_or_bit_cast(llty.into_int_type()).into()` method
+                // also would fail due to llty being a float type.
+                let base_int = self.ctx.ll_context.custom_width_int_type(bitsize as u32);
+
                 // Split the 128-bit integer into two 64-bit words for LLVM
                 let words = [(bits & u64::MAX as u128) as u64, (bits >> 64) as u64];
-                let llval = int_128.const_int_arbitrary_precision(&words);
+                let llval = base_int.const_int_arbitrary_precision(&words);
 
                 if let Primitive::Pointer(_) = be_repr {
                     llval.const_to_pointer(llty.into_pointer_type()).into()
                 } else {
-                    llval
-                        .const_truncate_or_bit_cast(llty.into_int_type())
-                        .into()
+                    self.ll_builder.build_bit_cast(llval, llty, "").unwrap()
                 }
             }
         }

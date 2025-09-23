@@ -56,6 +56,10 @@ impl Layout {
         }
     }
 
+    pub fn is_bool(&self) -> bool {
+        matches!(self.backend_repr, BackendRepr::Scalar(Primitive::U8))
+    }
+
     pub fn is_immediate(&self) -> bool {
         match self.backend_repr {
             BackendRepr::Scalar(_)  => true,
@@ -135,3 +139,33 @@ pub enum Primitive {
     Pointer(AddressSpace),
 }
 
+impl Primitive {
+    pub fn is_signed_integer(&self) -> bool {
+        matches!(
+            self,
+            Primitive::I8 | Primitive::I16 | Primitive::I32 | Primitive::I64 | Primitive::I128
+        )
+    }
+
+    pub fn is_unsigned_integer(&self) -> bool {
+        matches!(
+            self,
+            Primitive::U8 | Primitive::U16 | Primitive::U32 | Primitive::U64 | Primitive::U128
+        )
+    }
+
+    pub fn is_integer(&self) -> bool {
+        self.is_signed_integer() || self.is_unsigned_integer()
+    }
+
+    pub fn is_floating_point(&self) -> bool {
+        matches!(
+            self,
+            Primitive::F16 | Primitive::F32 | Primitive::F64 | Primitive::F128
+        )
+    }
+
+    pub fn is_pointer(&self) -> bool {
+        matches!(self, Primitive::Pointer(_))
+    }
+}
