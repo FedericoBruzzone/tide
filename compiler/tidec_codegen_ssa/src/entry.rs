@@ -5,8 +5,8 @@ use crate::{
 use tidec_abi::calling_convention::function::{FnAbi, PassMode};
 use tidec_tir::{
     basic_blocks::{BasicBlock, BasicBlockData},
+    syntax::{Local, RETURN_LOCAL, RValue, Statement, Terminator, TirTy},
     tir::TirBody,
-    syntax::{TirTy, Local, RETURN_LOCAL, RValue, Statement, Terminator},
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, info, instrument};

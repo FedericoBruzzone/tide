@@ -1,7 +1,7 @@
 use crate::{
     basic_blocks::{BasicBlock, BasicBlockData},
     layout_ctx::LayoutCtx,
-    syntax::{Body, TirTy, Local, LocalData},
+    syntax::{Body, Local, LocalData, TirTy},
 };
 use tidec_abi::{
     layout::TyAndLayout,

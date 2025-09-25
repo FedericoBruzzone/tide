@@ -1,4 +1,4 @@
-use crate::{tir::TirCtx, syntax::TirTy};
+use crate::{syntax::TirTy, tir::TirCtx};
 use tidec_abi::{
     layout::{BackendRepr, Layout, Primitive, TyAndLayout},
     size_and_align::{AbiAndPrefAlign, Size},

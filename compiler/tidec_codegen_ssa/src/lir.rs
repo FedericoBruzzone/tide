@@ -11,8 +11,8 @@ use tidec_abi::{
 use tidec_tir::basic_blocks::ENTRY_BLOCK;
 use tidec_tir::syntax::ConstValue;
 use tidec_tir::{
+    syntax::{Local, LocalData, TirTy},
     tir::TirBody,
-    syntax::{TirTy, Local, LocalData},
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
