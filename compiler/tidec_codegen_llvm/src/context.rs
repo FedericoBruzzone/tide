@@ -19,16 +19,16 @@ use tidec_codegen_ssa::lir;
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
 
-use crate::lir::lir_body_metadata::{
+use crate::tir::tir_body_metadata::{
     CallConvUtils, LinkageUtils, UnnamedAddressUtils, VisibilityUtils,
 };
-use crate::lir::lir_ty::BasicTypesUtils;
+use crate::tir::tir_ty::BasicTypesUtils;
 use tidec_codegen_ssa::traits::{
     BuilderMethods, CodegenBackend, CodegenBackendTypes, CodegenMethods, DefineCodegenMethods,
     FnAbiOf, LayoutOf, PreDefineCodegenMethods,
 };
-use tidec_tir::lir::{DefId, EmitKind, LirBody, LirBodyMetadata, LirCtx, LirUnit};
-use tidec_tir::syntax::{LirTy, Local, LocalData, RETURN_LOCAL};
+use tidec_tir::tir::{DefId, EmitKind, TirBody, TirBodyMetadata, TirCtx, TirUnit};
+use tidec_tir::syntax::{TirTy, Local, LocalData, RETURN_LOCAL};
 
 // TODO: Add filelds from rustc/compiler/rustc_codegen_llvm/src/context.rs
 pub struct CodegenCtx<'ll> {
@@ -37,8 +37,8 @@ pub struct CodegenCtx<'ll> {
     // FIXME: Make this private
     pub ll_module: Module<'ll>,
 
-    /// The LIR type context.
-    pub lir_ctx: LirCtx,
+    /// The TIR type context.
+    pub lir_ctx: TirCtx,
 
     /// A map from DefId to the LLVM value (usually a function value).
     //
@@ -75,7 +75,7 @@ impl<'ll> CodegenBackend for CodegenCtx<'ll> {
 impl PreDefineCodegenMethods for CodegenCtx<'_> {
     fn predefine_body(
         &self,
-        lir_body_metadata: &LirBodyMetadata,
+        lir_body_metadata: &TirBodyMetadata,
         lir_body_ret_and_args: &IdxVec<Local, LocalData>,
     ) {
         let name = lir_body_metadata.name.as_str();
@@ -112,13 +112,13 @@ impl PreDefineCodegenMethods for CodegenCtx<'_> {
 impl DefineCodegenMethods for CodegenCtx<'_> {
     /// For LLVM, we are able to reuse the generic implementation of `define_lir_body`
     /// provided in the `lir` module, as it is generic over the `BuilderMethods` trait.
-    fn define_body(&self, lir_body: &LirBody) {
+    fn define_body(&self, lir_body: &TirBody) {
         lir::codegen_lir_body::<'_, '_, crate::builder::CodegenBuilder<'_, '_>>(self, lir_body);
     }
 }
 
 impl LayoutOf for CodegenCtx<'_> {
-    fn layout_of(&self, lir_ty: LirTy) -> TyAndLayout<LirTy> {
+    fn layout_of(&self, lir_ty: TirTy) -> TyAndLayout<TirTy> {
         self.lir_ctx.layout_of(lir_ty)
     }
 }
@@ -127,10 +127,10 @@ impl FnAbiOf for CodegenCtx<'_> {
     #[instrument(level = "debug", skip(self, lir_ty_ctx))]
     fn fn_abi_of(
         &self,
-        lir_ty_ctx: &LirCtx,
+        lir_ty_ctx: &TirCtx,
         lir_ret_and_args: &IdxVec<Local, LocalData>,
-    ) -> FnAbi<LirTy> {
-        let argument_of = |ty: LirTy| -> ArgAbi<LirTy> {
+    ) -> FnAbi<TirTy> {
+        let argument_of = |ty: TirTy| -> ArgAbi<TirTy> {
             let layout = lir_ty_ctx.layout_of(ty);
             let pass_mode = match layout.backend_repr {
                 BackendRepr::Scalar(_) => PassMode::Direct,
@@ -180,7 +180,7 @@ impl<'ll> CodegenCtx<'ll> {
 
 impl<'ll> CodegenMethods<'ll> for CodegenCtx<'ll> {
     #[instrument(skip(lir_ctx, ll_context, ll_module))]
-    fn new(lir_ctx: LirCtx, ll_context: &'ll Context, ll_module: Module<'ll>) -> CodegenCtx<'ll> {
+    fn new(lir_ctx: TirCtx, ll_context: &'ll Context, ll_module: Module<'ll>) -> CodegenCtx<'ll> {
         let internal_target = lir_ctx.target();
         {
             let target_triple_string = internal_target.target_triple_string();
@@ -214,13 +214,13 @@ impl<'ll> CodegenMethods<'ll> for CodegenCtx<'ll> {
         }
     }
 
-    fn lir_ctx(&self) -> &LirCtx {
+    fn lir_ctx(&self) -> &TirCtx {
         &self.lir_ctx
     }
 
     #[instrument(skip(self, lir_unit))]
     // TODO: Move as a method of `CodegenCtx`?
-    fn compile_lir_unit<'a, B: BuilderMethods<'a, 'll>>(&self, lir_unit: LirUnit) {
+    fn compile_lir_unit<'a, B: BuilderMethods<'a, 'll>>(&self, lir_unit: TirUnit) {
         // Predefine the functions. That is, create the function declarations.
         for lir_body in &lir_unit.bodies {
             self.predefine_body(&lir_body.metadata, &lir_body.ret_and_args);
@@ -289,7 +289,7 @@ impl<'ll> CodegenMethods<'ll> for CodegenCtx<'ll> {
         }
     }
 
-    fn get_fn(&self, lir_body_metadata: &LirBodyMetadata) -> Option<FunctionValue<'ll>> {
+    fn get_fn(&self, lir_body_metadata: &TirBodyMetadata) -> Option<FunctionValue<'ll>> {
         let name = lir_body_metadata.name.as_str();
 
         if let Some(instance) = self.instances.borrow().get(&lir_body_metadata.def_id) {
@@ -309,7 +309,7 @@ impl<'ll> CodegenMethods<'ll> for CodegenCtx<'ll> {
     /// TODO(bruzzone): We expect this function returns a function value.
     fn get_or_define_fn(
         &self,
-        lir_body_metadata: &LirBodyMetadata,
+        lir_body_metadata: &TirBodyMetadata,
         lir_body_ret_and_args: &IdxVec<Local, LocalData>,
     ) -> FunctionValue<'ll> {
         let name = lir_body_metadata.name.as_str();

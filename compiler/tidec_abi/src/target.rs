@@ -8,7 +8,7 @@ use crate::size_and_align::{AbiAndPrefAlign, Size};
 /// This struct encapsulates information about the backend, data layout,
 /// and optional target triple. It is used to drive architecture- and
 /// platform-specific decisions throughout the compiler.
-pub struct LirTarget {
+pub struct TirTarget {
     /// The codegen backend to use.
     pub codegen_backend: BackendKind,
     /// The data layout configuration for the target, including type alignments,
@@ -22,9 +22,9 @@ pub struct LirTarget {
     pub target_triple: Option<TargetTriple>,
 }
 
-impl LirTarget {
+impl TirTarget {
     pub fn new(codegen_backend: BackendKind) -> Self {
-        LirTarget {
+        TirTarget {
             data_layout: TargetDataLayout::new(),
             codegen_backend,
             target_triple: None,

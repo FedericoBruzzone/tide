@@ -1,11 +1,11 @@
 use crate::{
     basic_blocks::{BasicBlock, BasicBlockData},
     layout_ctx::LayoutCtx,
-    syntax::{Body, LirTy, Local, LocalData},
+    syntax::{Body, TirTy, Local, LocalData},
 };
 use tidec_abi::{
     layout::TyAndLayout,
-    target::{BackendKind, LirTarget},
+    target::{BackendKind, TirTarget},
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
@@ -104,8 +104,8 @@ pub enum Visibility {
     Protected,
 }
 
-/// A user-callable item in LIR.
-pub enum LirItemKind {
+/// A user-callable item in TIR.
+pub enum TirItemKind {
     /// A function.
     Function,
     /// A closure.
@@ -214,22 +214,22 @@ pub enum CallConv {
     MaxID = 1023,
 }
 
-/// The kind of a LIR body.
+/// The kind of a TIR body.
 // TODO(bruzzone): add other kinds of body; e.g. virtual function, fn pointer, etc.
 // See: rustc_middle::ty::InstanceKind
-pub enum LirBodyKind {
-    Item(LirItemKind),
+pub enum TirBodyKind {
+    Item(TirItemKind),
 }
 
-/// The metadata of a LIR body (function).
-pub struct LirBodyMetadata {
+/// The metadata of a TIR body (function).
+pub struct TirBodyMetadata {
     /// The definition ID of the function.
     pub def_id: DefId,
     /// The name of the function.
     /// It aims to be the `symbol name` for the backend purpose.
     pub name: String,
     /// The kind of the body.
-    pub kind: LirBodyKind,
+    pub kind: TirBodyKind,
     /// If the function should be inlined.
     pub inlined: bool,
     /// The linkage of the function.
@@ -242,15 +242,15 @@ pub struct LirBodyMetadata {
     pub call_conv: CallConv,
 }
 
-/// The body of a function in LIR. A body could be a function, a closure, a coroutine, etc.
+/// The body of a function in TIR. A body could be a function, a closure, a coroutine, etc.
 /// A body is expected to be monomorphized and specialized, that is, when generic parameters are
 /// involved, each instantiation of the generics should have its own body.
 ///
 /// Semantically, a body is a portion of code that constitutes a complete unit of execution.
-pub struct LirBody {
+pub struct TirBody {
     /// The metadata of the function.
     // TODO(bruzzone): consider to detach the metadata from the body
-    pub metadata: LirBodyMetadata,
+    pub metadata: TirBodyMetadata,
 
     /// The locals for return value and arguments of the function.
     /// The first local is the return value, and the rest are the arguments.
@@ -263,18 +263,18 @@ pub struct LirBody {
     pub basic_blocks: IdxVec<BasicBlock, BasicBlockData>,
 }
 
-/// The metadata of a LIR unit (module).
-pub struct LirUnitMetadata {
+/// The metadata of a TIR unit (module).
+pub struct TirUnitMetadata {
     pub unit_name: String,
 }
 
-/// The LIR unit (module).
-pub struct LirUnit {
+/// The TIR unit (module).
+pub struct TirUnit {
     /// The metadata of the unit.
-    pub metadata: LirUnitMetadata,
+    pub metadata: TirUnitMetadata,
 
     /// The functions in the unit.
-    pub bodies: IdxVec<Body, LirBody>,
+    pub bodies: IdxVec<Body, TirBody>,
 }
 
 #[derive(Debug)]
@@ -286,35 +286,35 @@ pub enum EmitKind {
 }
 
 #[derive(Debug)]
-/// The arguments for LIR type context. Usually provided by the user.
-pub struct LirArgs {
+/// The arguments for TIR type context. Usually provided by the user.
+pub struct TirArgs {
     pub emit_kind: EmitKind,
     // TODO(bruzzone): add more arguments here
 }
 
 #[derive(Debug)]
-pub struct LirCtx {
-    target: LirTarget,
-    arguments: LirArgs,
+pub struct TirCtx {
+    target: TirTarget,
+    arguments: TirArgs,
     // TODO(bruzzone): here we should have, other then an arena, also a HashMap from DefId
     // to the body of the function.
 }
 
-impl LirCtx {
+impl TirCtx {
     #[instrument]
     pub fn new(codegen_backend: BackendKind, emit_kind: EmitKind) -> Self {
-        let target = LirTarget::new(codegen_backend);
-        let arguments = LirArgs { emit_kind };
-        let ctx = LirCtx { target, arguments };
-        debug!("LirTyCtx created: {:?}", ctx);
+        let target = TirTarget::new(codegen_backend);
+        let arguments = TirArgs { emit_kind };
+        let ctx = TirCtx { target, arguments };
+        debug!("TirTyCtx created: {:?}", ctx);
         ctx
     }
 
-    pub fn target(&self) -> &LirTarget {
+    pub fn target(&self) -> &TirTarget {
         &self.target
     }
 
-    pub fn layout_of(&self, ty: LirTy) -> TyAndLayout<LirTy> {
+    pub fn layout_of(&self, ty: TirTy) -> TyAndLayout<TirTy> {
         let layout_ctx = LayoutCtx::new(self);
         layout_ctx.compute_layout(ty)
     }
