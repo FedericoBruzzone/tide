@@ -1,5 +1,5 @@
 use inkwell::{module::Linkage, values::UnnamedAddress, GlobalVisibility};
-use tidec_lir::lir;
+use tidec_tir::lir;
 
 /// A trait to convert LirLinkage into LLVM Linkage.
 ///

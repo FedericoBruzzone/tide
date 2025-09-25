@@ -3,12 +3,12 @@ use std::num::NonZero;
 //
 use tidec_abi::target::BackendKind;
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
-use tidec_lir::basic_blocks::BasicBlockData;
-use tidec_lir::lir::{
+use tidec_tir::basic_blocks::BasicBlockData;
+use tidec_tir::lir::{
     CallConv, DefId, EmitKind, Linkage, LirBody, LirBodyKind, LirBodyMetadata, LirCtx, LirItemKind,
     LirUnit, LirUnitMetadata, UnnamedAddress, Visibility,
 };
-use tidec_lir::syntax::{
+use tidec_tir::syntax::{
     ConstOperand, ConstScalar, ConstValue, LirTy, LocalData, Place, RValue, RawScalarValue,
     Statement, Terminator, RETURN_LOCAL,
 };

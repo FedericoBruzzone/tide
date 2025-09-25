@@ -3,7 +3,7 @@ use crate::{
     traits::LayoutOf,
 };
 use tidec_abi::calling_convention::function::{FnAbi, PassMode};
-use tidec_lir::{
+use tidec_tir::{
     basic_blocks::{BasicBlock, BasicBlockData},
     lir::LirBody,
     syntax::{LirTy, Local, RETURN_LOCAL, RValue, Statement, Terminator},

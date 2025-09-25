@@ -1,5 +1,5 @@
 [package]
-name = "tidec_lir"
+name = "tidec_tir"
 version = "0.1.0"
 edition = "2021"
 

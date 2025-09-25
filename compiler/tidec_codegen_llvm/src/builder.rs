@@ -6,7 +6,7 @@ use tidec_abi::layout::{BackendRepr, Primitive, TyAndLayout};
 use tidec_abi::size_and_align::{Align, Size};
 use tidec_codegen_ssa::lir::{OperandRef, PlaceRef};
 use tidec_codegen_ssa::traits::{BuilderMethods, CodegenBackendTypes};
-use tidec_lir::syntax::{ConstScalar, LirTy};
+use tidec_tir::syntax::{ConstScalar, LirTy};
 use tracing::instrument;
 
 use crate::context::CodegenCtx;

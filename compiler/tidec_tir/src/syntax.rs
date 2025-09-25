@@ -304,7 +304,7 @@ pub enum ConstScalar {
 ///
 /// ```rust
 /// use std::num::NonZeroU8;
-/// use tidec_lir::syntax::RawScalarValue;
+/// use tidec_tir::syntax::RawScalarValue;
 ///
 /// // A 1-byte scalar (u8 = 127)
 /// let small = RawScalarValue {

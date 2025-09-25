@@ -3,7 +3,7 @@ use tidec_abi::{
     layout::TyAndLayout,
     size_and_align::{Align, Size},
 };
-use tidec_lir::{
+use tidec_tir::{
     lir::{LirBody, LirBodyMetadata, LirCtx, LirUnit},
     syntax::{ConstScalar, LirTy, Local, LocalData},
 };

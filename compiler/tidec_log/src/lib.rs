@@ -9,13 +9,13 @@
 //! The `<PREFIX>` is a prefix that can be set to any string. It is used to customize the log configuration for different tools. For example, `tidec` uses `TIDEC` as the prefix.
 //!
 //!
-//! Suppose you're working on `tidec_lir` and want to run a minimal standalone
+//! Suppose you're working on `tidec_tir` and want to run a minimal standalone
 //! program that can be debugged with access to `debug!` logs emitted by
-//! `tidec_lir`. You can do this by writing:
+//! `tidec_tir`. You can do this by writing:
 //!
 //! ```toml
 //! [dependencies]
-//! tidec_lir = { path = "../tidec_lir" }
+//! tidec_tir = { path = "../tidec_tir" }
 //! tidec_log = { path = "../tidec_log" }
 //! ```
 //!
@@ -47,7 +47,7 @@
 //! The `tidec_log` crate exists as a minimal, self-contained logger setup,
 //! allowing you to enable logging without depending on the much larger
 //! `tidec` crate. This helps you iterate quickly on individual compiler
-//! components like `tidec_lir`, without requiring full rebuilds of the entire
+//! components like `tidec_tir`, without requiring full rebuilds of the entire
 //! compiler stack.
 
 use std::{env::VarError, fmt::Debug, fs::File, io::IsTerminal, path::PathBuf};

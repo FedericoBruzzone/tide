@@ -8,9 +8,9 @@ use tidec_abi::{
     layout::TyAndLayout,
     size_and_align::{Align, Size},
 };
-use tidec_lir::basic_blocks::ENTRY_BLOCK;
-use tidec_lir::syntax::ConstValue;
-use tidec_lir::{
+use tidec_tir::basic_blocks::ENTRY_BLOCK;
+use tidec_tir::syntax::ConstValue;
+use tidec_tir::{
     lir::LirBody,
     syntax::{LirTy, Local, LocalData},
 };
@@ -195,7 +195,7 @@ pub enum LocalRef<V: std::fmt::Debug> {
     /// From a source-level perspective, this corresponds to temporary values
     /// that do not have a dedicated memory location, such as intermediate
     /// results in expressions.
-    /// See [`tidec_lir::syntax::Operand`] for more details.
+    /// See [`tidec_tir::syntax::Operand`] for more details.
     OperandRef(OperandRef<V>),
     /// A local that is yet to be assigned a value.
     /// This is a placeholder for locals that will be initialized later.
