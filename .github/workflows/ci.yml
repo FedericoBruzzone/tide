@@ -67,6 +67,7 @@ jobs:
         with:
           path: ${{ env.LLVM_INSTALL_PATH }}
           key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
+        if: always()
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
