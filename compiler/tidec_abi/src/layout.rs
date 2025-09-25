@@ -11,7 +11,7 @@ use crate::{
 pub struct TyAndLayout<T> {
     /// The type this layout refers to.
     ///
-    /// This is usually a LIR type, but can be any type that has a size and alignment.
+    /// This is usually a TIR type, but can be any type that has a size and alignment.
     pub ty: T,
     /// The layout information for the type, including size and alignment.
     pub layout: Layout,

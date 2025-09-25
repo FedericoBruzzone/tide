@@ -4,12 +4,12 @@ use std::num::NonZero;
 use tidec_abi::target::BackendKind;
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
 use tidec_tir::basic_blocks::BasicBlockData;
-use tidec_tir::lir::{
-    CallConv, DefId, EmitKind, Linkage, LirBody, LirBodyKind, LirBodyMetadata, LirCtx, LirItemKind,
-    LirUnit, LirUnitMetadata, UnnamedAddress, Visibility,
+use tidec_tir::tir::{
+    CallConv, DefId, EmitKind, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirCtx, TirItemKind,
+    TirUnit, TirUnitMetadata, UnnamedAddress, Visibility,
 };
 use tidec_tir::syntax::{
-    ConstOperand, ConstScalar, ConstValue, LirTy, LocalData, Place, RValue, RawScalarValue,
+    ConstOperand, ConstScalar, ConstValue, TirTy, LocalData, Place, RValue, RawScalarValue,
     Statement, Terminator, RETURN_LOCAL,
 };
 use tidec_utils::index_vec::IdxVec;
@@ -21,7 +21,7 @@ fn main() {
     debug!("Logging initialized");
 
     // TODO: check valitiy of TideArgs
-    let lir_ctx = LirCtx::new(BackendKind::Llvm, EmitKind::LlvmIr);
+    let lir_ctx = TirCtx::new(BackendKind::Llvm, EmitKind::LlvmIr);
 
     // Create a simple main function that returns 0.
     // ```c
@@ -29,20 +29,20 @@ fn main() {
     //   return 0;
     // }
     // ```
-    let lir_body_metadata = LirBodyMetadata {
+    let lir_body_metadata = TirBodyMetadata {
         def_id: DefId(0),
         name: "main".to_string(),
-        kind: LirBodyKind::Item(LirItemKind::Function),
+        kind: TirBodyKind::Item(TirItemKind::Function),
         inlined: false,
         linkage: Linkage::External, // TODO(bruzzone): Check the correct linkage
         visibility: Visibility::Default,
         unnamed_address: UnnamedAddress::None,
         call_conv: CallConv::C,
     };
-    let lir_bodies = IdxVec::from_raw(vec![LirBody {
+    let lir_bodies = IdxVec::from_raw(vec![TirBody {
         metadata: lir_body_metadata,
         ret_and_args: IdxVec::from_raw(vec![LocalData {
-            ty: LirTy::F32,
+            ty: TirTy::F32,
             mutable: false,
         }]),
         locals: IdxVec::new(),
@@ -57,22 +57,22 @@ fn main() {
                         data: 7.7f32.to_bits() as u128,
                         size: NonZero::new(4).unwrap(), // 4 bytes for f32
                     })),
-                    LirTy::F32,
+                    TirTy::F32,
                     // ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
                     //     data: 7u128,
                     //     size: NonZero::new(4).unwrap(), // 4 bytes for i32
                     // })),
-                    // LirTy::I32,
+                    // TirTy::I32,
                 )),
             )))],
             terminator: Terminator::Return,
         }]),
     }]);
-    let lit_unit_metadata = LirUnitMetadata {
+    let lit_unit_metadata = TirUnitMetadata {
         unit_name: "main".to_string(),
     };
 
-    let lir_unit: LirUnit = LirUnit {
+    let lir_unit: TirUnit = TirUnit {
         metadata: lit_unit_metadata,
         bodies: lir_bodies,
     };
@@ -80,7 +80,7 @@ fn main() {
     codegen_lir_unit(lir_ctx, lir_unit);
 }
 
-pub fn codegen_lir_unit(lir_ctx: LirCtx, lir_unit: LirUnit) {
+pub fn codegen_lir_unit(lir_ctx: TirCtx, lir_unit: TirUnit) {
     match lir_ctx.backend_kind() {
         BackendKind::Llvm => llvm_codegen_lir_unit(lir_ctx, lir_unit),
         BackendKind::Cranelift => todo!(),
@@ -112,7 +112,7 @@ fn init_tidec_logger() {
 //     init_tidec_logger();
 //     debug!("Logging initialized");
 //
-//     let lir_ctx = LirTyCtx::new(BackendKind::Llvm);
+//     let lir_ctx = TirTyCtx::new(BackendKind::Llvm);
 //
 //     let context = Context::create();
 //     let module = context.create_module("main");
@@ -150,7 +150,7 @@ fn init_tidec_logger() {
 //     // ========= TESTS =========
 //     // =========================
 //
-//     let int_value = LirTy::I8.into_basic_type(codegen.ctx()).size_of().unwrap();
+//     let int_value = TirTy::I8.into_basic_type(codegen.ctx()).size_of().unwrap();
 //     let align = int_value.get_type().get_alignment();
 //     println!("Size of i8: {}", int_value);
 //     println!("Alignment of i8: {}", align);

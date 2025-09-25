@@ -5,8 +5,8 @@ use crate::{
 use tidec_abi::calling_convention::function::{FnAbi, PassMode};
 use tidec_tir::{
     basic_blocks::{BasicBlock, BasicBlockData},
-    lir::LirBody,
-    syntax::{LirTy, Local, RETURN_LOCAL, RValue, Statement, Terminator},
+    tir::TirBody,
+    syntax::{TirTy, Local, RETURN_LOCAL, RValue, Statement, Terminator},
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, info, instrument};
@@ -20,10 +20,10 @@ pub struct FnCtx<'a, 'be, B: BuilderMethods<'a, 'be>> {
     /// The function ABI.
     /// This contains information about the calling convention,
     /// argument types, return type, etc.
-    pub fn_abi: FnAbi<LirTy>,
+    pub fn_abi: FnAbi<TirTy>,
 
-    /// The body of the function in LIR.
-    pub lir_body: &'a LirBody,
+    /// The body of the function in TIR.
+    pub lir_body: &'a TirBody,
 
     /// The function value.
     /// This is the function that will be generated.
@@ -38,14 +38,14 @@ pub struct FnCtx<'a, 'be, B: BuilderMethods<'a, 'be>> {
     pub locals: IdxVec<Local, LocalRef<B::Value>>,
 
     /// A cache of the basic blocks in the function.
-    /// This is also used to avoid creating multiple basic blocks for the same LIR basic block.
+    /// This is also used to avoid creating multiple basic blocks for the same TIR basic block.
     pub cached_bbs: IdxVec<BasicBlock, Option<B::BasicBlock>>,
 }
 
 impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
-    /// Codegen the given LIR basic block.
+    /// Codegen the given TIR basic block.
     /// This creates a new builder for the basic block and generates the instructions in it.
-    /// It also updates the `cached_bbs` field to avoid creating multiple basic blocks for the same LIR basic block.
+    /// It also updates the `cached_bbs` field to avoid creating multiple basic blocks for the same TIR basic block.
     /// Note that this function does not handle unreachable blocks.
     pub fn codegen_basic_block(&mut self, bb: BasicBlock) {
         let be_bb = self.get_or_insert_bb(bb);
@@ -59,7 +59,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
         self.codegen_terminator(&mut builder, term);
     }
 
-    /// Get the backend basic block for the given LIR basic block.
+    /// Get the backend basic block for the given TIR basic block.
     /// If it does not exist, create it and cache it.
     pub fn get_or_insert_bb(&mut self, bb: BasicBlock) -> B::BasicBlock {
         if let Some(Some(be_bb)) = self.cached_bbs.get(bb) {
@@ -72,7 +72,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     }
 
     #[instrument(level = "debug", skip(self, builder))]
-    /// Codegen the given LIR statement.
+    /// Codegen the given TIR statement.
     /// This function is called by `codegen_basic_block` for each statement in the basic block.
     /// It generates the corresponding instructions in the backend.
     fn codegen_statement(&mut self, builder: &mut B, stmt: &Statement) {
@@ -148,7 +148,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
         self.locals[local] = new_ref;
     }
 
-    /// Codegen the given LIR terminator.
+    /// Codegen the given TIR terminator.
     /// This function is called by `codegen_basic_block` for the terminator of the basic block.
     /// It generates the corresponding instructions in the backend.
     fn codegen_terminator(&mut self, builder: &mut B, term: &Terminator) {

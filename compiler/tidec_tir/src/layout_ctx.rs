@@ -1,22 +1,22 @@
-use crate::{lir::LirCtx, syntax::LirTy};
+use crate::{tir::TirCtx, syntax::TirTy};
 use tidec_abi::{
     layout::{BackendRepr, Layout, Primitive, TyAndLayout},
     size_and_align::{AbiAndPrefAlign, Size},
 };
 
 pub struct LayoutCtx<'a> {
-    lir_ctx: &'a LirCtx,
+    lir_ctx: &'a TirCtx,
 }
 
 impl<'a> LayoutCtx<'a> {
-    // It accepts the `LirCtx` because it contains the `TargetDataLayout`.
-    pub fn new(lir_ctx: &'a LirCtx) -> Self {
+    // It accepts the `TirCtx` because it contains the `TargetDataLayout`.
+    pub fn new(lir_ctx: &'a TirCtx) -> Self {
         LayoutCtx { lir_ctx }
     }
 
     /// Computes the layout for a given type. We should cache the results
     /// to avoid recomputing the layout for the same type multiple times.
-    pub fn compute_layout(&self, ty: LirTy) -> TyAndLayout<LirTy> {
+    pub fn compute_layout(&self, ty: TirTy) -> TyAndLayout<TirTy> {
         let data_layout = &self.lir_ctx.target().data_layout;
 
         let scalar = |primitive: Primitive| -> (Size, AbiAndPrefAlign, BackendRepr) {
@@ -44,24 +44,24 @@ impl<'a> LayoutCtx<'a> {
         };
 
         let (size, align, backend_repr) = match ty {
-            LirTy::I8 => scalar(Primitive::I8),
-            LirTy::I16 => scalar(Primitive::I16),
-            LirTy::I32 => scalar(Primitive::I32),
-            LirTy::I64 => scalar(Primitive::I64),
-            LirTy::I128 => scalar(Primitive::I128),
-            LirTy::U8 => scalar(Primitive::U8),
-            LirTy::U16 => scalar(Primitive::U16),
-            LirTy::U32 => scalar(Primitive::U32),
-            LirTy::U64 => scalar(Primitive::U64),
-            LirTy::U128 => scalar(Primitive::U128),
-            LirTy::F16 => scalar(Primitive::F16),
-            LirTy::F32 => scalar(Primitive::F32),
-            LirTy::F64 => scalar(Primitive::F64),
-            LirTy::F128 => scalar(Primitive::F128),
+            TirTy::I8 => scalar(Primitive::I8),
+            TirTy::I16 => scalar(Primitive::I16),
+            TirTy::I32 => scalar(Primitive::I32),
+            TirTy::I64 => scalar(Primitive::I64),
+            TirTy::I128 => scalar(Primitive::I128),
+            TirTy::U8 => scalar(Primitive::U8),
+            TirTy::U16 => scalar(Primitive::U16),
+            TirTy::U32 => scalar(Primitive::U32),
+            TirTy::U64 => scalar(Primitive::U64),
+            TirTy::U128 => scalar(Primitive::U128),
+            TirTy::F16 => scalar(Primitive::F16),
+            TirTy::F32 => scalar(Primitive::F32),
+            TirTy::F64 => scalar(Primitive::F64),
+            TirTy::F128 => scalar(Primitive::F128),
             // TODO: Implement layout computation for Metadata types (e.g., for unsized types or trait objects).
             // Metadata represents type information for unsized types (such as slices or trait objects),
             // which require special handling for their layout. Support for this will be added in a future release.
-            LirTy::Metadata => unimplemented!("Layout computation for LirTy::Metadata (used for unsized types/trait objects) is not yet supported. See TODO comment for details."),
+            TirTy::Metadata => unimplemented!("Layout computation for TirTy::Metadata (used for unsized types/trait objects) is not yet supported. See TODO comment for details."),
         };
 
         TyAndLayout {

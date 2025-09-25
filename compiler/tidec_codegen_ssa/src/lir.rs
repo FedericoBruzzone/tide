@@ -11,8 +11,8 @@ use tidec_abi::{
 use tidec_tir::basic_blocks::ENTRY_BLOCK;
 use tidec_tir::syntax::ConstValue;
 use tidec_tir::{
-    lir::LirBody,
-    syntax::{LirTy, Local, LocalData},
+    tir::TirBody,
+    syntax::{TirTy, Local, LocalData},
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
@@ -40,7 +40,7 @@ pub struct PlaceRef<V: std::fmt::Debug> {
     /// Provides size, alignment, and ABI information, which is essential for
     /// correct code generation, especially for aggregates, unsized types,
     /// or types with nontrivial ABI requirements.
-    pub ty_layout: TyAndLayout<LirTy>,
+    pub ty_layout: TyAndLayout<TirTy>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -58,18 +58,18 @@ pub struct OperandRef<V: std::fmt::Debug> {
     ///
     /// Provides size, alignment, and ABI information needed for correct
     /// code generation and backend handling.
-    pub ty_layout: TyAndLayout<LirTy>,
+    pub ty_layout: TyAndLayout<TirTy>,
 }
 
 impl<V: std::fmt::Debug> OperandRef<V> {
-    pub fn new_zst(ty_layout: TyAndLayout<LirTy>) -> Self {
+    pub fn new_zst(ty_layout: TyAndLayout<TirTy>) -> Self {
         OperandRef {
             operand_val: OperandVal::Zst,
             ty_layout,
         }
     }
 
-    pub fn new_immediate(value: V, ty_layout: TyAndLayout<LirTy>) -> Self {
+    pub fn new_immediate(value: V, ty_layout: TyAndLayout<TirTy>) -> Self {
         OperandRef {
             operand_val: OperandVal::Immediate(value),
             ty_layout,
@@ -79,7 +79,7 @@ impl<V: std::fmt::Debug> OperandRef<V> {
     pub fn from_const<'a, 'be, B: BuilderMethods<'a, 'be, Value = V>>(
         builder: &mut B,
         const_val: ConstValue,
-        lir_ty: LirTy,
+        lir_ty: TirTy,
     ) -> Self {
         let ty_layout = builder.ctx().layout_of(lir_ty);
         let be_val = match const_val {
@@ -123,7 +123,7 @@ pub enum OperandVal<V: std::fmt::Debug> {
 impl<'a, 'be, V: Copy + PartialEq + std::fmt::Debug> PlaceRef<V> {
     pub fn alloca<B: BuilderMethods<'a, 'be, Value = V>>(
         builder: &mut B,
-        ty_and_layout: TyAndLayout<LirTy>,
+        ty_and_layout: TyAndLayout<TirTy>,
     ) -> Self {
         assert!(!ty_and_layout.is_zst());
         PlaceVal::alloca(
@@ -137,7 +137,7 @@ impl<'a, 'be, V: Copy + PartialEq + std::fmt::Debug> PlaceRef<V> {
 
 #[derive(Debug, Clone, Copy)]
 /// A backend value paired with alignment information, representing the underlying storage
-/// for a LIR place during codegen.
+/// for a TIR place during codegen.
 ///
 /// This struct abstracts over how a place is represented in the backend,
 /// whether it be a memory address, an SSA value, or other representations.
@@ -165,7 +165,7 @@ impl<'a, 'be, V: Copy + PartialEq + std::fmt::Debug> PlaceVal<V> {
         PlaceVal { value, align }
     }
 
-    pub fn with_layout(self, layout: TyAndLayout<LirTy>) -> PlaceRef<V> {
+    pub fn with_layout(self, layout: TyAndLayout<TirTy>) -> PlaceRef<V> {
         // TODO: Assert that the type is not unsized (through `TyAndLayout`).
         PlaceRef {
             place_val: self,
@@ -175,7 +175,7 @@ impl<'a, 'be, V: Copy + PartialEq + std::fmt::Debug> PlaceVal<V> {
 }
 
 #[derive(Debug)]
-/// A local reference in the LIR, representing a local variable or temporary
+/// A local reference in the TIR, representing a local variable or temporary
 /// during code generation.
 ///
 /// This enum is used to represent different kinds of local references
@@ -204,7 +204,7 @@ pub enum LocalRef<V: std::fmt::Debug> {
 }
 
 #[instrument(level = "debug", skip(ctx, lir_body))]
-/// Define (compile) a LIR function body into the backend representation.
+/// Define (compile) a TIR function body into the backend representation.
 // It corresponds to the:
 // ```rust
 // pub fn codegen_mir<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
@@ -215,7 +215,7 @@ pub enum LocalRef<V: std::fmt::Debug> {
 // function in rustc_codegen_ssa/src/mir/mod.rs
 pub fn codegen_lir_body<'a, 'be, B: BuilderMethods<'a, 'be>>(
     ctx: &'a B::CodegenCtx,
-    lir_body: &'a LirBody,
+    lir_body: &'a TirBody,
 ) {
     let fn_abi = ctx.fn_abi_of(ctx.lir_ctx(), &lir_body.ret_and_args);
     let fn_value = ctx.get_or_define_fn(&lir_body.metadata, &lir_body.ret_and_args);
