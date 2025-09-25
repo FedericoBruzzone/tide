@@ -84,6 +84,9 @@ jobs:
         shell: pwsh
         run: echo "${{ env.LLVM_INSTALL_PATH }}\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Set LLVM_SYS_201_PREFIX
+        run: echo "LLVM_SYS_201_PREFIX=${{ env.LLVM_INSTALL_PATH }}" >> $GITHUB_ENV
+
       - name: Build project
         run: cargo build --verbose
 
