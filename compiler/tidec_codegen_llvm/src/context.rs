@@ -27,8 +27,8 @@ use tidec_codegen_ssa::traits::{
     BuilderMethods, CodegenBackend, CodegenBackendTypes, CodegenMethods, DefineCodegenMethods,
     FnAbiOf, LayoutOf, PreDefineCodegenMethods,
 };
+use tidec_tir::syntax::{Local, LocalData, TirTy, RETURN_LOCAL};
 use tidec_tir::tir::{DefId, EmitKind, TirBody, TirBodyMetadata, TirCtx, TirUnit};
-use tidec_tir::syntax::{TirTy, Local, LocalData, RETURN_LOCAL};
 
 // TODO: Add filelds from rustc/compiler/rustc_codegen_llvm/src/context.rs
 pub struct CodegenCtx<'ll> {

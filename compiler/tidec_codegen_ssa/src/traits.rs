@@ -4,8 +4,8 @@ use tidec_abi::{
     size_and_align::{Align, Size},
 };
 use tidec_tir::{
+    syntax::{ConstScalar, Local, LocalData, TirTy},
     tir::{TirBody, TirBodyMetadata, TirCtx, TirUnit},
-    syntax::{ConstScalar, TirTy, Local, LocalData},
 };
 use tidec_utils::index_vec::IdxVec;
 

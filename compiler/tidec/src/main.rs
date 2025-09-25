@@ -4,13 +4,13 @@ use std::num::NonZero;
 use tidec_abi::target::BackendKind;
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
 use tidec_tir::basic_blocks::BasicBlockData;
+use tidec_tir::syntax::{
+    ConstOperand, ConstScalar, ConstValue, LocalData, Place, RValue, RawScalarValue, Statement,
+    Terminator, TirTy, RETURN_LOCAL,
+};
 use tidec_tir::tir::{
     CallConv, DefId, EmitKind, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirCtx, TirItemKind,
     TirUnit, TirUnitMetadata, UnnamedAddress, Visibility,
-};
-use tidec_tir::syntax::{
-    ConstOperand, ConstScalar, ConstValue, TirTy, LocalData, Place, RValue, RawScalarValue,
-    Statement, Terminator, RETURN_LOCAL,
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::debug;
