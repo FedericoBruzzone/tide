@@ -63,12 +63,11 @@ jobs:
           ninja -C build install
 
       - name: Save LLVM cache
-        if: steps.cache-llvm-restore.outputs.cache-hit != 'true'
+        if: always() # if: steps.cache-llvm-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ${{ env.LLVM_INSTALL_PATH }}
           key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
-        if: always()
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
