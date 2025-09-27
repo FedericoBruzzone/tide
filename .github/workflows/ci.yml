@@ -18,6 +18,8 @@ on:
 env:
   LLVM_BRANCH: release/20.x
   LLVM_INSTALL_PATH: ${{ github.workspace }}/llvm-install
+  RUST_BACKTRACE: 1
+
 
 jobs:
   build:
@@ -93,7 +95,7 @@ jobs:
         with:
           path: ${{ env.LLVM_INSTALL_PATH }}
           key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
-
+      
       # -------------------------------
       # Install Rust toolchain
       # -------------------------------
@@ -110,6 +112,12 @@ jobs:
         if: runner.os != 'Windows'
         run: echo "${{ env.LLVM_INSTALL_PATH }}/bin" >> $GITHUB_PATH
 
+      - name: Set LLVM_SYS_201_PREFIX (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          echo "LLVM_SYS_201_PREFIX=${{ env.LLVM_INSTALL_PATH }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Add LLVM to path (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -120,11 +128,11 @@ jobs:
       # -------------------------------
       - name: Build project
         if: always()
-        run: RUST_BACKTRACE=1 cargo build --verbose
+        run: cargo build --verbose
 
       - name: Run tests
         if: always()
-        run: RUST_BACKTRACE=1 cargo test --verbose
+        run: cargo test --verbose
 
       - name: Run clippy
         if: always()
