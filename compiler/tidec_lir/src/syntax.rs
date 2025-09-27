@@ -4,7 +4,7 @@ use tidec_abi::size_and_align::Size;
 use tidec_utils::idx::Idx;
 
 #[derive(Debug, Copy, Clone)]
-pub enum TirTy {
+pub enum LirTy {
     I8,
     I16,
     I32,
@@ -27,7 +27,7 @@ pub enum TirTy {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-/// A `Local` variable in the TIR.
+/// A `Local` variable in the LIR.
 ///
 /// `Local` acts as an index into the set of local variables declared within a function or
 /// basic block. These variables include user-declared bindings, temporaries created
@@ -46,7 +46,7 @@ impl Local {
 }
 
 #[derive(Debug)]
-/// Represents a memory location (or "place") within TIR that can be used
+/// Represents a memory location (or "place") within LIR that can be used
 /// as the target of assignments or the source of loads.
 ///
 /// A `Place` consists of:
@@ -57,7 +57,7 @@ impl Local {
 /// For example, in the Rust expression `x.0.y`, the base local would be `x`, and the
 /// projection would include field accessors to reach `.0` and `.y`.
 ///
-/// `Place`s are used in TIR to abstract over memory references in a type-safe and
+/// `Place`s are used in LIR to abstract over memory references in a type-safe and
 /// structured manner, allowing the compiler to track aliasing, lifetimes,
 /// and optimize memory access.
 ///
@@ -108,11 +108,11 @@ pub enum Projection {
 }
 
 #[derive(Eq, PartialEq)]
-/// A body identifier in the TIR. A body can be a function, a closure, etc.
+/// A body identifier in the LIR. A body can be a function, a closure, etc.
 pub struct Body(usize);
 
 #[derive(Debug)]
-/// Represents a right-hand side (RValue) in TIR during code generation.
+/// Represents a right-hand side (RValue) in LIR during code generation.
 ///
 /// An `RValue` is something that can be **evaluated to produce a value**.  
 /// It corresponds to expressions on the right-hand side of assignments or
@@ -144,13 +144,13 @@ pub enum RValue {
 #[derive(Debug)]
 // TODO(bruzzone): Add more variants for different constant types.
 pub enum ConstOperand {
-    /// A constant value that can be used in the TIR.
-    Value(ConstValue, TirTy),
+    /// A constant value that can be used in the LIR.
+    Value(ConstValue, LirTy),
 }
 
 impl ConstOperand {
     /// Returns the type of the constant operand.
-    pub fn ty(&self) -> TirTy {
+    pub fn ty(&self) -> LirTy {
         match self {
             ConstOperand::Value(_, ty) => *ty,
         }
@@ -304,7 +304,7 @@ pub enum ConstScalar {
 ///
 /// ```rust
 /// use std::num::NonZeroU8;
-/// use tidec_tir::syntax::RawScalarValue;
+/// use tidec_lir::syntax::RawScalarValue;
 ///
 /// // A 1-byte scalar (u8 = 127)
 /// let small = RawScalarValue {
@@ -354,7 +354,7 @@ impl RawScalarValue {
 
 #[derive(Debug, Copy, Clone)]
 pub struct LocalData {
-    pub ty: TirTy,
+    pub ty: LirTy,
     pub mutable: bool,
 }
 

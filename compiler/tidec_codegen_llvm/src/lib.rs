@@ -1,4 +1,4 @@
 pub mod builder;
 pub mod context;
 pub mod entry;
-pub mod tir;
+pub mod lir;

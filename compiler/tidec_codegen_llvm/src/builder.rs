@@ -6,11 +6,11 @@ use tidec_abi::layout::{BackendRepr, Primitive, TyAndLayout};
 use tidec_abi::size_and_align::{Align, Size};
 use tidec_codegen_ssa::lir::{OperandRef, PlaceRef};
 use tidec_codegen_ssa::traits::{BuilderMethods, CodegenBackendTypes};
-use tidec_tir::syntax::{ConstScalar, TirTy};
+use tidec_lir::syntax::{ConstScalar, LirTy};
 use tracing::instrument;
 
 use crate::context::CodegenCtx;
-use crate::tir::tir_ty::BasicTypesUtils;
+use crate::lir::lir_ty::BasicTypesUtils;
 
 /// A builder for generating LLVM IR code.
 ///
@@ -195,7 +195,7 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
     fn const_scalar_to_backend_value(
         &self,
         const_scalar: ConstScalar,
-        ty_layout: TyAndLayout<TirTy>,
+        ty_layout: TyAndLayout<LirTy>,
     ) -> Self::Value {
         assert!(matches!(ty_layout.backend_repr, BackendRepr::Scalar(_)));
         let llty = ty_layout.ty.into_basic_type(self.ctx);

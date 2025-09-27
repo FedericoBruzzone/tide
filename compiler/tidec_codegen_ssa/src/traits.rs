@@ -3,9 +3,9 @@ use tidec_abi::{
     layout::TyAndLayout,
     size_and_align::{Align, Size},
 };
-use tidec_tir::{
-    syntax::{ConstScalar, Local, LocalData, TirTy},
-    tir::{TirBody, TirBodyMetadata, TirCtx, TirUnit},
+use tidec_lir::{
+    lir::{LirBody, LirBodyMetadata, LirCtx, LirUnit},
+    syntax::{ConstScalar, LirTy, Local, LocalData},
 };
 use tidec_utils::index_vec::IdxVec;
 
@@ -15,16 +15,16 @@ use crate::lir::{OperandRef, PlaceRef};
 /// It is used to get the layout of a type in the codegen backend.
 pub trait LayoutOf {
     /// Returns the layout of the given type.
-    fn layout_of(&self, ty: TirTy) -> TyAndLayout<TirTy>;
+    fn layout_of(&self, ty: LirTy) -> TyAndLayout<LirTy>;
 }
 
 pub trait FnAbiOf {
     /// Returns the function ABI for the given return type and argument types.
     fn fn_abi_of(
         &self,
-        lit_ty_ctx: &TirCtx,
+        lit_ty_ctx: &LirCtx,
         ret_and_args: &IdxVec<Local, LocalData>,
-    ) -> FnAbi<TirTy>;
+    ) -> FnAbi<LirTy>;
 }
 
 /// This trait is used to define the types used in the codegen backend.
@@ -68,7 +68,7 @@ pub trait CodegenBackend: Sized + CodegenBackendTypes {
 pub trait PreDefineCodegenMethods: Sized + CodegenBackendTypes {
     fn predefine_body(
         &self,
-        lir_body_metadata: &TirBodyMetadata,
+        lir_body_metadata: &LirBodyMetadata,
         lir_body_ret_and_args: &IdxVec<Local, LocalData>,
     );
 }
@@ -76,7 +76,7 @@ pub trait PreDefineCodegenMethods: Sized + CodegenBackendTypes {
 /// The definition methods for the codegen backend. It is used to define (compile) function bodies.
 /// The definition should be done after pre-defining all functions (see `PreDefineCodegenMethods`).
 pub trait DefineCodegenMethods: Sized + CodegenBackendTypes {
-    fn define_body(&self, lir_body: &TirBody);
+    fn define_body(&self, lir_body: &LirBody);
 }
 
 /// The codegen backend methods.
@@ -89,27 +89,27 @@ pub trait CodegenMethods<'be>:
     + PreDefineCodegenMethods
     + DefineCodegenMethods
 {
-    /// Creates a new codegen context for the given TIR type context and module.
-    fn new(lir_ty_ctx: TirCtx, context: &'be Self::Context, module: Self::Module) -> Self;
+    /// Creates a new codegen context for the given LIR type context and module.
+    fn new(lir_ty_ctx: LirCtx, context: &'be Self::Context, module: Self::Module) -> Self;
 
-    /// Return the TIR type context associated with this codegen context.
-    fn lir_ctx(&self) -> &TirCtx;
+    /// Return the LIR type context associated with this codegen context.
+    fn lir_ctx(&self) -> &LirCtx;
 
-    /// Compile the given TIR unit.
-    fn compile_lir_unit<'a, B: BuilderMethods<'a, 'be>>(&self, lir_unit: TirUnit);
+    /// Compile the given LIR unit.
+    fn compile_lir_unit<'a, B: BuilderMethods<'a, 'be>>(&self, lir_unit: LirUnit);
 
     /// Emit the output of the codegen backend.
     /// This could be writing to a file ASM, object file, or JIT execution.
     /// The output format is backend-specific.
     fn emit_output(&self);
 
-    /// Returns the function value for the given TIR body if it exists.
-    fn get_fn(&self, lir_body_metadata: &TirBodyMetadata) -> Option<Self::FunctionValue>;
+    /// Returns the function value for the given LIR body if it exists.
+    fn get_fn(&self, lir_body_metadata: &LirBodyMetadata) -> Option<Self::FunctionValue>;
 
-    /// Returns the function value for the given TIR body or defines it if it does not exist.
+    /// Returns the function value for the given LIR body or defines it if it does not exist.
     fn get_or_define_fn(
         &self,
-        lir_fn_metadata: &TirBodyMetadata,
+        lir_fn_metadata: &LirBodyMetadata,
         lir_fn_ret_and_args: &IdxVec<Local, LocalData>,
     ) -> Self::FunctionValue;
 }
@@ -170,13 +170,13 @@ pub trait BuilderMethods<'a, 'be>: Sized + CodegenBackendTypes {
     /// The alignment is the alignment of the place reference.
     fn build_load(&mut self, ty: Self::Type, ptr: Self::Value, align: Align) -> Self::Value;
 
-    /// Construct a backend value from a constant scalar and its TIR type.
+    /// Construct a backend value from a constant scalar and its LIR type.
     /// This is used to create constant values in the backend.
     ///
     /// For instance, in LLVM this could correspond to `LLVMConstInt` or `LLVMConstReal`.
     fn const_scalar_to_backend_value(
         &self,
         const_scalar: ConstScalar,
-        ty_layout: TyAndLayout<TirTy>,
+        ty_layout: TyAndLayout<LirTy>,
     ) -> Self::Value;
 }

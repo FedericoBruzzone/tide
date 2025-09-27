@@ -1,7 +1,6 @@
 name: CI
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
     paths:
@@ -63,7 +62,7 @@ jobs:
           ninja -C build install
 
       - name: Save LLVM cache
-        if: always() # if: steps.cache-llvm-restore.outputs.cache-hit != 'true'
+        if: steps.cache-llvm-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: ${{ env.LLVM_INSTALL_PATH }}
@@ -84,22 +83,31 @@ jobs:
         shell: pwsh
         run: echo "${{ env.LLVM_INSTALL_PATH }}\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Set LLVM_SYS_201_PREFIX (Unix)
+      - name: Build project (Unix)
         if: runner.os != 'Windows'
-        run: echo "LLVM_SYS_201_PREFIX=${{ env.LLVM_INSTALL_PATH }}" >> $GITHUB_ENV
+        run: cargo build --verbose
+        env:
+          LLVM_SYS_201_PREFIX: ${{ env.LLVM_INSTALL_PATH }}
 
-      - name: Set LLVM_SYS_201_PREFIX (Windows)
+      - name: Build project (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $llvm_path = "${{ env.LLVM_INSTALL_PATH }}".Replace('/', '\')
-          "LLVM_SYS_201_PREFIX=$llvm_path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $env:LLVM_SYS_201_PREFIX = "${{ env.LLVM_INSTALL_PATH }}".Replace('/', '\')
+          cargo build --verbose
 
-      - name: Build project
-        run: cargo build --verbose
-
-      - name: Run tests
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
         run: cargo test --verbose
+        env:
+          LLVM_SYS_201_PREFIX: ${{ env.LLVM_INSTALL_PATH }}
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:LLVM_SYS_201_PREFIX = "${{ env.LLVM_INSTALL_PATH }}".Replace('/', '\')
+          cargo test --verbose
 
       - name: Run clippy
         run: cargo clippy -- -D warnings
