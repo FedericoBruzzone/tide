@@ -79,11 +79,6 @@ jobs:
         run: mkdir -p ${{ env.LLVM_INSTALL_PATH }}
         shell: bash
 
-      - name: Ensure LLVM cache path exists (Windows)
-        if: always() && runner.os == 'Windows'
-        shell: pwsh
-        run: New-Item -ItemType Directory -Force -Path $env:LLVM_INSTALL_PATH
-
       # -------------------------------
       # Save LLVM cache always
       # -------------------------------
@@ -114,6 +109,17 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: echo "${{ env.LLVM_INSTALL_PATH }}\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # -------------------------------
+      # Set LLVM_SYS_200_PREFIX for inkwell
+      # -------------------------------
+      - name: Set LLVM_SYS_200_PREFIX for inkwell (Unix)
+        if: runner.os != 'Windows'
+        run: echo "LLVM_SYS_200_PREFIX=${{ env.LLVM_INSTALL_PATH }}" >> $GITHUB_ENV
+
+      - name: Set LLVM_SYS_200_PREFIX for inkwell (Windows)
+        if: runner.os == 'Windows'
+        run: echo "LLVM_SYS_200_PREFIX=${{ env.LLVM_INSTALL_PATH }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       # -------------------------------
       # Build and test Rust project
