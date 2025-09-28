@@ -42,7 +42,8 @@ fn main() {
     let lir_bodies = IdxVec::from_raw(vec![TirBody {
         metadata: lir_body_metadata,
         ret_and_args: IdxVec::from_raw(vec![LocalData {
-            ty: TirTy::F32,
+            // ty: TirTy::F32,
+            ty: TirTy::I32,
             mutable: false,
         }]),
         locals: IdxVec::new(),
@@ -53,16 +54,16 @@ fn main() {
                     projection: vec![],
                 },
                 RValue::Const(ConstOperand::Value(
-                    ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
-                        data: 7.7f32.to_bits() as u128,
-                        size: NonZero::new(4).unwrap(), // 4 bytes for f32
-                    })),
-                    TirTy::F32,
                     // ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
-                    //     data: 7u128,
-                    //     size: NonZero::new(4).unwrap(), // 4 bytes for i32
+                    //     data: 7.7f32.to_bits() as u128,
+                    //     size: NonZero::new(4).unwrap(), // 4 bytes for f32
                     // })),
-                    // TirTy::I32,
+                    // TirTy::F32,
+                    ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                        data: 7u128,
+                        size: NonZero::new(4).unwrap(), // 4 bytes for i32
+                    })),
+                    TirTy::I32,
                 )),
             )))],
             terminator: Terminator::Return,
