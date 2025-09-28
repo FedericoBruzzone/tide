@@ -51,10 +51,10 @@ impl Local {
     }
 }
 
-impl Into<Place> for Local {
-    fn into(self) -> Place {
+impl From<Local> for Place {
+    fn from(val: Local) -> Self {
         Place {
-            local: self,
+            local: val,
             projection: vec![],
         }
     }
