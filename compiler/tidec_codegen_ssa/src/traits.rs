@@ -9,7 +9,7 @@ use tidec_tir::{
 };
 use tidec_utils::index_vec::IdxVec;
 
-use crate::lir::{OperandRef, PlaceRef};
+use crate::tir::{OperandRef, PlaceRef};
 
 /// This trait is used to get the layout of a type.
 /// It is used to get the layout of a type in the codegen backend.

@@ -15,7 +15,7 @@ use inkwell::values::{AnyValueEnum, BasicMetadataValueEnum, BasicValueEnum, Func
 use inkwell::OptimizationLevel;
 use tidec_abi::calling_convention::function::{ArgAbi, FnAbi, PassMode};
 use tidec_abi::layout::{BackendRepr, TyAndLayout};
-use tidec_codegen_ssa::lir;
+use tidec_codegen_ssa::tir;
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
 
@@ -113,7 +113,7 @@ impl DefineCodegenMethods for CodegenCtx<'_> {
     /// For LLVM, we are able to reuse the generic implementation of `define_lir_body`
     /// provided in the `lir` module, as it is generic over the `BuilderMethods` trait.
     fn define_body(&self, lir_body: &TirBody) {
-        lir::codegen_lir_body::<'_, '_, crate::builder::CodegenBuilder<'_, '_>>(self, lir_body);
+        tir::codegen_lir_body::<'_, '_, crate::builder::CodegenBuilder<'_, '_>>(self, lir_body);
     }
 }
 
