@@ -321,7 +321,7 @@ mod tests {
         let mut vec: IdxVec<TestIdx, i32> = IdxVec::new();
         let idx1 = vec.push(42);
         let idx2 = vec.push(84);
-        
+
         assert_eq!(idx1, TestIdx::new(0));
         assert_eq!(idx2, TestIdx::new(1));
         assert_eq!(vec[idx1], 42);
@@ -352,7 +352,7 @@ mod tests {
         let mut vec: IdxVec<TestIdx, i32> = IdxVec::new();
         vec.push(1);
         vec.push(2);
-        
+
         assert_eq!(vec.pop(), Some(2));
         assert_eq!(vec.pop(), Some(1));
         assert_eq!(vec.pop(), None);
@@ -363,7 +363,7 @@ mod tests {
     fn test_into_iter_enumerated() {
         let vec: IdxVec<TestIdx, i32> = IdxVec::from_raw(vec![10, 20, 30]);
         let items: Vec<_> = vec.into_iter_enumerated().collect();
-        
+
         assert_eq!(items.len(), 3);
         assert_eq!(items[0], (TestIdx::new(0), 10));
         assert_eq!(items[1], (TestIdx::new(1), 20));
@@ -374,7 +374,7 @@ mod tests {
     fn test_drain() {
         let mut vec: IdxVec<TestIdx, i32> = IdxVec::from_raw(vec![1, 2, 3, 4, 5]);
         let drained: Vec<_> = vec.drain(1..4).collect();
-        
+
         assert_eq!(drained, vec![2, 3, 4]);
         assert_eq!(vec.raw, vec![1, 5]);
     }
@@ -383,8 +383,15 @@ mod tests {
     fn test_drain_enumerated() {
         let mut vec: IdxVec<TestIdx, i32> = IdxVec::from_raw(vec![10, 20, 30, 40, 50]);
         let drained: Vec<_> = vec.drain_enumerated(1..4).collect();
-        
-        assert_eq!(drained, vec![(TestIdx::new(1), 20), (TestIdx::new(2), 30), (TestIdx::new(3), 40)]);
+
+        assert_eq!(
+            drained,
+            vec![
+                (TestIdx::new(1), 20),
+                (TestIdx::new(2), 30),
+                (TestIdx::new(3), 40)
+            ]
+        );
         assert_eq!(vec.raw, vec![10, 50]);
     }
 
@@ -392,12 +399,12 @@ mod tests {
     fn test_ensure_contains_elem() {
         let mut vec: IdxVec<TestIdx, i32> = IdxVec::new();
         let elem = TestIdx::new(5);
-        
+
         let value = vec.ensure_contains_elem(elem, || 42);
         assert_eq!(*value, 42);
         assert_eq!(vec.len(), 6);
         assert_eq!(vec[elem], 42);
-        
+
         // Test that it doesn't resize if element already exists
         *vec.ensure_contains_elem(elem, || 99) = 100;
         assert_eq!(vec[elem], 100);
@@ -408,7 +415,7 @@ mod tests {
     fn test_resize() {
         let mut vec: IdxVec<TestIdx, i32> = IdxVec::from_raw(vec![1, 2]);
         vec.resize(5, 42);
-        
+
         assert_eq!(vec.len(), 5);
         assert_eq!(vec[TestIdx::new(0)], 1);
         assert_eq!(vec[TestIdx::new(1)], 2);
@@ -421,7 +428,7 @@ mod tests {
     fn test_resize_to_elem() {
         let mut vec: IdxVec<TestIdx, i32> = IdxVec::new();
         let target = TestIdx::new(3);
-        
+
         vec.resize_to_elem(target, || 99);
         assert_eq!(vec.len(), 4);
         for i in 0..4 {
@@ -433,7 +440,7 @@ mod tests {
     fn test_append() {
         let mut vec1: IdxVec<TestIdx, i32> = IdxVec::from_raw(vec![1, 2]);
         let mut vec2: IdxVec<TestIdx, i32> = IdxVec::from_raw(vec![3, 4, 5]);
-        
+
         vec1.append(&mut vec2);
         assert_eq!(vec1.raw, vec![1, 2, 3, 4, 5]);
         assert_eq!(vec2.raw, Vec::<i32>::new());
@@ -450,7 +457,7 @@ mod tests {
     #[test]
     fn test_indexing() {
         let vec: IdxVec<TestIdx, i32> = IdxVec::from_raw(vec![10, 20, 30]);
-        
+
         assert_eq!(vec[TestIdx::new(0)], 10);
         assert_eq!(vec[TestIdx::new(1)], 20);
         assert_eq!(vec[TestIdx::new(2)], 30);
@@ -459,7 +466,7 @@ mod tests {
     #[test]
     fn test_mut_indexing() {
         let mut vec: IdxVec<TestIdx, i32> = IdxVec::from_raw(vec![10, 20, 30]);
-        
+
         vec[TestIdx::new(1)] = 99;
         assert_eq!(vec[TestIdx::new(1)], 99);
     }
@@ -488,7 +495,7 @@ mod tests {
 
         assert_eq!(vec1, vec2);
         assert_ne!(vec1, vec3);
-        
+
         // Test that they can be used in hash collections
         use std::collections::HashSet;
         let mut set = HashSet::new();
