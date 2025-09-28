@@ -99,8 +99,8 @@ jobs:
       # -------------------------------
       # Ensure cache path exists (important for saving even if build fails)
       # -------------------------------
-      - name: Ensure LLVM cache path exists
-        if: always()
+      - name: Ensure LLVM cache path exists (Linux/macOS)
+        if: always() && runner.os != 'Windows'
         run: mkdir -p ${{ env.LLVM_INSTALL_PATH_UNIX }}
         shell: bash
 
