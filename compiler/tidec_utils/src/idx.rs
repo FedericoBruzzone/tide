@@ -150,7 +150,8 @@ mod tests {
     fn test_into_slice_idx_range_from() {
         let start = TestIdx::new(3);
         let range_from = start..;
-        let slice_idx = <RangeFrom<TestIdx> as IntoSliceIdx<TestIdx, [i32]>>::into_slice_idx(range_from);
+        let slice_idx =
+            <RangeFrom<TestIdx> as IntoSliceIdx<TestIdx, [i32]>>::into_slice_idx(range_from);
         assert_eq!(slice_idx, 3..);
     }
 
@@ -158,7 +159,8 @@ mod tests {
     fn test_into_slice_idx_range_to() {
         let end = TestIdx::new(7);
         let range_to = ..end;
-        let slice_idx = <RangeTo<TestIdx> as IntoSliceIdx<TestIdx, [i32]>>::into_slice_idx(range_to);
+        let slice_idx =
+            <RangeTo<TestIdx> as IntoSliceIdx<TestIdx, [i32]>>::into_slice_idx(range_to);
         assert_eq!(slice_idx, ..7);
     }
 
@@ -167,7 +169,9 @@ mod tests {
         let start = TestIdx::new(2);
         let end = TestIdx::new(8);
         let range_inclusive = start..=end;
-        let slice_idx = <RangeInclusive<TestIdx> as IntoSliceIdx<TestIdx, [i32]>>::into_slice_idx(range_inclusive);
+        let slice_idx = <RangeInclusive<TestIdx> as IntoSliceIdx<TestIdx, [i32]>>::into_slice_idx(
+            range_inclusive,
+        );
         assert_eq!(slice_idx, 2..=8);
     }
 
@@ -175,7 +179,9 @@ mod tests {
     fn test_into_slice_idx_range_to_inclusive() {
         let end = TestIdx::new(6);
         let range_to_inclusive = ..=end;
-        let slice_idx = <RangeToInclusive<TestIdx> as IntoSliceIdx<TestIdx, [i32]>>::into_slice_idx(range_to_inclusive);
+        let slice_idx = <RangeToInclusive<TestIdx> as IntoSliceIdx<TestIdx, [i32]>>::into_slice_idx(
+            range_to_inclusive,
+        );
         assert_eq!(slice_idx, ..=6);
     }
 

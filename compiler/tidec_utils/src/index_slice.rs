@@ -234,7 +234,7 @@ mod tests {
     fn test_from_raw() {
         let raw = [1, 2, 3, 4, 5];
         let slice = IdxSlice::from_raw(&raw);
-        
+
         assert_eq!(slice.len(), 5);
         assert!(!slice.is_empty());
         assert_eq!(slice[TestIdx::new(0)], 1);
@@ -245,7 +245,7 @@ mod tests {
     fn test_from_raw_mut() {
         let mut raw = [1, 2, 3];
         let slice = IdxSlice::from_raw_mut(&mut raw);
-        
+
         slice[TestIdx::new(1)] = 99;
         assert_eq!(raw[1], 99);
     }
@@ -255,7 +255,7 @@ mod tests {
         let raw = [10, 20, 30];
         let slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&raw);
         let next = slice.next_index();
-        
+
         assert_eq!(next, TestIdx::new(3));
     }
 
@@ -264,7 +264,7 @@ mod tests {
         let raw = [1, 2, 3];
         let slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&raw);
         let items: Vec<_> = slice.iter().copied().collect();
-        
+
         assert_eq!(items, vec![1, 2, 3]);
     }
 
@@ -273,7 +273,7 @@ mod tests {
         let raw = [10, 20, 30];
         let slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&raw);
         let items: Vec<_> = slice.iter_enumerated().collect();
-        
+
         assert_eq!(items.len(), 3);
         assert_eq!(items[0], (TestIdx::new(0), &10));
         assert_eq!(items[1], (TestIdx::new(1), &20));
@@ -285,19 +285,27 @@ mod tests {
         let raw = [1, 2, 3, 4];
         let slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&raw);
         let indices: Vec<_> = slice.indices().collect();
-        
-        assert_eq!(indices, vec![TestIdx::new(0), TestIdx::new(1), TestIdx::new(2), TestIdx::new(3)]);
+
+        assert_eq!(
+            indices,
+            vec![
+                TestIdx::new(0),
+                TestIdx::new(1),
+                TestIdx::new(2),
+                TestIdx::new(3)
+            ]
+        );
     }
 
     #[test]
     fn test_iter_mut() {
         let mut raw = [1, 2, 3];
         let slice: &mut IdxSlice<TestIdx, i32> = IdxSlice::from_raw_mut(&mut raw);
-        
+
         for item in slice.iter_mut() {
             *item *= 2;
         }
-        
+
         assert_eq!(raw, [2, 4, 6]);
     }
 
@@ -305,11 +313,11 @@ mod tests {
     fn test_iter_enumerated_mut() {
         let mut raw = [10, 20, 30];
         let slice: &mut IdxSlice<TestIdx, i32> = IdxSlice::from_raw_mut(&mut raw);
-        
+
         for (idx, item) in slice.iter_enumerated_mut() {
             *item = (idx.idx() * 100) as i32;
         }
-        
+
         assert_eq!(raw, [0, 100, 200]);
     }
 
@@ -318,7 +326,7 @@ mod tests {
         let raw = [1, 2, 3];
         let slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&raw);
         assert_eq!(slice.last_index(), Some(TestIdx::new(2)));
-        
+
         let empty_raw: [i32; 0] = [];
         let empty_slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&empty_raw);
         assert_eq!(empty_slice.last_index(), None);
@@ -332,7 +340,7 @@ mod tests {
             slice.swap(TestIdx::new(0), TestIdx::new(3));
         }
         assert_eq!(raw, [4, 2, 3, 1]);
-        
+
         {
             let slice: &mut IdxSlice<TestIdx, i32> = IdxSlice::from_raw_mut(&mut raw);
             slice.swap(TestIdx::new(1), TestIdx::new(2));
@@ -344,10 +352,10 @@ mod tests {
     fn test_get() {
         let raw = [10, 20, 30, 40, 50];
         let slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&raw);
-        
+
         assert_eq!(slice.get(TestIdx::new(2)), Some(&30));
         assert_eq!(slice.get(TestIdx::new(10)), None);
-        
+
         // Test range get
         let range_result = slice.get(TestIdx::new(1)..TestIdx::new(4));
         assert_eq!(range_result, Some(&[20, 30, 40][..]));
@@ -376,7 +384,7 @@ mod tests {
             *b = 88;
         }
         assert_eq!(raw, [1, 99, 3, 88, 5]);
-        
+
         {
             let slice: &mut IdxSlice<TestIdx, i32> = IdxSlice::from_raw_mut(&mut raw);
             let (c, d) = slice.pick2_mut(TestIdx::new(4), TestIdx::new(0));
@@ -419,7 +427,7 @@ mod tests {
     fn test_binary_search() {
         let raw = [10, 20, 30, 40, 50];
         let slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&raw);
-        
+
         assert_eq!(slice.binary_search(&30), Ok(TestIdx::new(2)));
         assert_eq!(slice.binary_search(&35), Err(TestIdx::new(3)));
         assert_eq!(slice.binary_search(&5), Err(TestIdx::new(0)));
@@ -430,10 +438,10 @@ mod tests {
     fn test_index_operations() {
         let raw = [100, 200, 300, 400, 500];
         let slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&raw);
-        
+
         // Test single index
         assert_eq!(slice[TestIdx::new(2)], 300);
-        
+
         // Test range indexing
         let sub_slice = &slice[TestIdx::new(1)..TestIdx::new(4)];
         assert_eq!(sub_slice, &[200, 300, 400]);
@@ -447,7 +455,7 @@ mod tests {
             slice[TestIdx::new(2)] = 99;
         }
         assert_eq!(raw[2], 99);
-        
+
         {
             let slice: &mut IdxSlice<TestIdx, i32> = IdxSlice::from_raw_mut(&mut raw);
             // Test range mutable indexing
@@ -462,7 +470,7 @@ mod tests {
     fn test_into_iterator() {
         let raw = [1, 2, 3, 4];
         let slice: &IdxSlice<TestIdx, i32> = IdxSlice::from_raw(&raw);
-        
+
         let items: Vec<_> = slice.into_iter().copied().collect();
         assert_eq!(items, vec![1, 2, 3, 4]);
     }

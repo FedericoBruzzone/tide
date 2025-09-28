@@ -267,7 +267,7 @@ mod tests {
     fn test_logger_config_from_prefix() {
         // Test with no environment variables set
         let config = LoggerConfig::from_prefix("TEST_NONEXISTENT").unwrap();
-        
+
         // Check that all results are Err when env vars don't exist
         assert!(config.filter.is_err());
         assert!(config.color.is_err());
@@ -278,7 +278,7 @@ mod tests {
         matches!(config.log_writer, LogWriter::Stderr);
     }
 
-    #[test] 
+    #[test]
     fn test_logger_config_from_prefix_with_env_vars() {
         // Set up test environment variables
         unsafe {
@@ -296,7 +296,7 @@ mod tests {
         assert_eq!(config.color.unwrap(), "always");
         assert_eq!(config.line_numbers.unwrap(), "1");
         assert_eq!(config.file_names.unwrap(), "1");
-        
+
         matches!(config.log_writer, LogWriter::Stdout);
 
         // Clean up
@@ -368,7 +368,7 @@ mod tests {
     fn test_log_error_display() {
         let error1 = LogError::ColorNotValid("invalid".to_string());
         let error2 = LogError::NotUnicode("bad_unicode".to_string());
-        
+
         assert_eq!(error1.to_string(), "Color not valid: invalid");
         assert_eq!(error2.to_string(), "Not unicode: bad_unicode");
     }

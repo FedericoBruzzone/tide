@@ -30,7 +30,6 @@ impl TirTy {
     pub fn is_floating_point(&self) -> bool {
         matches!(self, TirTy::F16 | TirTy::F32 | TirTy::F64 | TirTy::F128)
     }
-
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -145,7 +144,7 @@ pub enum RValue {
     /// An operand value.
     Operand(Operand),
     /// A unary operation applied to an operand. The operand's type is preserved.
-    /// 
+    ///
     /// For example, negation (`-x`), logical not (`!x`), or bitwise not (`~x`).
     UnaryOp(UnaryOp, Operand),
 }
@@ -153,7 +152,7 @@ pub enum RValue {
 #[derive(Debug)]
 pub enum UnaryOp {
     /// Arithmetic negation.
-    Neg, 
+    Neg,
 }
 
 #[derive(Debug)]

@@ -5,7 +5,8 @@ use tidec_abi::target::BackendKind;
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
 use tidec_tir::basic_blocks::BasicBlockData;
 use tidec_tir::syntax::{
-    ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue, RawScalarValue, Statement, Terminator, TirTy, UnaryOp, RETURN_LOCAL
+    ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue, RawScalarValue,
+    Statement, Terminator, TirTy, UnaryOp, RETURN_LOCAL,
 };
 use tidec_tir::tir::{
     CallConv, DefId, EmitKind, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirCtx, TirItemKind,
@@ -52,18 +53,21 @@ fn main() {
                     local: RETURN_LOCAL,
                     projection: vec![],
                 },
-                RValue::UnaryOp(UnaryOp::Neg, Operand::Const(ConstOperand::Value(
-                    // ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
-                    //     data: 7.7f32.to_bits() as u128,
-                    //     size: NonZero::new(4).unwrap(), // 4 bytes for f32
-                    // })),
-                    // TirTy::F32,
-                    ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
-                        data: 7u128,
-                        size: NonZero::new(4).unwrap(), // 4 bytes for i32
-                    })),
-                    TirTy::I32,
-                ))),
+                RValue::UnaryOp(
+                    UnaryOp::Neg,
+                    Operand::Const(ConstOperand::Value(
+                        // ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                        //     data: 7.7f32.to_bits() as u128,
+                        //     size: NonZero::new(4).unwrap(), // 4 bytes for f32
+                        // })),
+                        // TirTy::F32,
+                        ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                            data: 7u128,
+                            size: NonZero::new(4).unwrap(), // 4 bytes for i32
+                        })),
+                        TirTy::I32,
+                    )),
+                ),
             )))],
             terminator: Terminator::Return,
         }]),
