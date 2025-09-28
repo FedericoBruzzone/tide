@@ -122,7 +122,7 @@ jobs:
         if: always() && runner.os == 'Windows'
         uses: actions/cache/save@v4
         with:
-          path: ${{ env.LLVM_INSTALL_PATH_UNIX }}
+          path: ${{ env.LLVM_INSTALL_PATH_WINDOWS }}
           key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
       
       # -------------------------------
