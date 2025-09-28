@@ -70,7 +70,7 @@ jobs:
       # Build LLVM if cache missed
       # -------------------------------
       - name: Build LLVM (Linux/macOS)
-        if: steps.cache-llvm-restore.outputs.cache-hit != 'true'
+        if: steps.cache-llvm-restore-unix.outputs.cache-hit != 'true'
         shell: bash
         run: |
           git clone --depth 1 --branch ${{ env.LLVM_BRANCH }} https://github.com/llvm/llvm-project.git
@@ -83,7 +83,7 @@ jobs:
           ninja -C build install
 
       - name: Build LLVM (Windows)
-        if: steps.cache-llvm-restore.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        if: steps.cache-llvm-restore-windows.outputs.cache-hit != 'true' && runner.os == 'Windows'
         shell: bash
         run: |
           git clone --depth 1 --branch ${{ env.LLVM_BRANCH }} https://github.com/llvm/llvm-project.git
