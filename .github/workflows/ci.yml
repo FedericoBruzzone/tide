@@ -127,22 +127,6 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
 
       # -------------------------------
-      # Set LLVM_SYS_201_PREFIX environment variable for llvm-sys crate
-      # -------------------------------
-      - name: Set LLVM_SYS_201_PREFIX (Linux/macOS)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          echo "LLVM_SYS_201_PREFIX=${{ env.LLVM_INSTALL_PATH_UNIX }}" >> $GITHUB_ENV
-
-      
-      - name: Set LLVM_SYS_201_PREFIX (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          echo "LLVM_SYS_201_PREFIX=${{ env.LLVM_INSTALL_PATH_WINDOWS }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      # -------------------------------
       # Install Rust toolchain
       # -------------------------------
       - name: Install Rust toolchain
