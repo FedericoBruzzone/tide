@@ -208,6 +208,108 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
             .into()
     }
 
+    fn build_fadd(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_float_type() && rhs.get_type().is_float_type());
+        self.ll_builder
+            .build_float_add(lhs.into_float_value(), rhs.into_float_value(), "fadd")
+            .unwrap()
+            .into()
+    }
+
+    fn build_add(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        self.ll_builder
+            .build_int_add(lhs.into_int_value(), rhs.into_int_value(), "add")
+            .unwrap()
+            .into()
+    }
+
+    fn build_sadd_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        Self::build_add(self, lhs, rhs)
+    }
+
+    fn build_uadd_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        Self::build_add(self, lhs, rhs)
+    }
+
+    fn build_fsub(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_float_type() && rhs.get_type().is_float_type());
+        self.ll_builder
+            .build_float_sub(lhs.into_float_value(), rhs.into_float_value(), "fsub")
+            .unwrap()
+            .into()
+    }
+
+    fn build_sub(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        self.ll_builder
+            .build_int_sub(lhs.into_int_value(), rhs.into_int_value(), "sub")
+            .unwrap()
+            .into()
+    }
+
+    fn build_ssub_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        Self::build_sub(self, lhs, rhs)
+    }
+
+    fn build_usub_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        Self::build_sub(self, lhs, rhs)
+    }
+
+    fn build_fmul(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_float_type() && rhs.get_type().is_float_type());
+        self.ll_builder
+            .build_float_mul(lhs.into_float_value(), rhs.into_float_value(), "fmul")
+            .unwrap()
+            .into()
+    }
+
+    fn build_mul(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        self.ll_builder
+            .build_int_mul(lhs.into_int_value(), rhs.into_int_value(), "mul")
+            .unwrap()
+            .into()
+    }
+
+    fn build_smul_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        Self::build_mul(self, lhs, rhs)
+    }
+
+    fn build_umul_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        Self::build_mul(self, lhs, rhs)
+    }
+
+    fn build_fdiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_float_type() && rhs.get_type().is_float_type());
+        self.ll_builder
+            .build_float_div(lhs.into_float_value(), rhs.into_float_value(), "fdiv")
+            .unwrap()
+            .into()
+    }
+
+    fn build_sdiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        self.ll_builder
+            .build_int_signed_div(lhs.into_int_value(), rhs.into_int_value(), "sdiv")
+            .unwrap()
+            .into()
+    }
+
+    fn build_udiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        self.ll_builder
+            .build_int_unsigned_div(lhs.into_int_value(), rhs.into_int_value(), "udiv")
+            .unwrap()
+            .into()
+    }
+
     fn const_scalar_to_backend_value(
         &self,
         const_scalar: ConstScalar,

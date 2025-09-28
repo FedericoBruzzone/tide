@@ -166,9 +166,38 @@ pub trait BuilderMethods<'a, 'be>: Sized + CodegenBackendTypes {
 
     /// Build a floating-point negation instruction for the given value.
     fn build_fneg(&mut self, val: Self::Value) -> Self::Value;
-
     /// Build an integer negation instruction for the given value.
     fn build_neg(&self, val: Self::Value) -> Self::Value;
+    /// Build a floating-point addition instruction for the given values.
+    fn build_fadd(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build an integer addition instruction for the given values.
+    fn build_add(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a signed integer addition instruction for the given values, with undefined behavior on overflow.
+    fn build_sadd_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build an unsigned integer addition instruction for the given values, with undefined behavior on overflow.
+    fn build_uadd_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a floating-point subtraction instruction for the given values.
+    fn build_fsub(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build an integer subtraction instruction for the given values.
+    fn build_sub(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a signed integer subtraction instruction for the given values, with undefined behavior on overflow.
+    fn build_ssub_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build an unsigned integer subtraction instruction for the given values, with undefined behavior on overflow.
+    fn build_usub_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a floating-point multiplication instruction for the given values.
+    fn build_fmul(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build an integer multiplication instruction for the given values.
+    fn build_mul(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a signed integer multiplication instruction for the given values, with undefined behavior on overflow.
+    fn build_smul_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build an unsigned integer multiplication instruction for the given values, with undefined behavior on overflow.
+    fn build_umul_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a floating-point division instruction for the given values.
+    fn build_fdiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a signed integer division instruction for the given values.
+    fn build_sdiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build an unsigned integer division instruction for the given values.
+    fn build_udiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;    
 
     /// Build a store instruction to store the given value to the given place reference.
     /// This is used to store a value to memory.
