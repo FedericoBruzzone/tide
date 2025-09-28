@@ -125,16 +125,6 @@ jobs:
         with:
           path: ${{ env.LLVM_INSTALL_PATH_WINDOWS }}
           key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
-      
-      # -------------------------------
-      # Install Rust toolchain
-      # -------------------------------
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-
 
       # -------------------------------
       # Set LLVM_SYS_201_PREFIX environment variable for llvm-sys crate
@@ -151,6 +141,15 @@ jobs:
         shell: pwsh
         run: |
           echo "LLVM_SYS_201_PREFIX=${{ env.LLVM_INSTALL_PATH_WINDOWS }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      # -------------------------------
+      # Install Rust toolchain
+      # -------------------------------
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
 
       # -------------------------------
       # Add LLVM to PATH
