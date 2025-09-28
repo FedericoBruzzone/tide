@@ -194,8 +194,11 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
 
                 OperandRef::new_immediate(
                     operand_val,
-                    builder.ctx()
-                        .layout_of(bin_op.ty(builder.ctx().tir_ctx(), lhs_ref.ty_layout.ty, rhs_ref.ty_layout.ty)),
+                    builder.ctx().layout_of(bin_op.ty(
+                        builder.ctx().tir_ctx(),
+                        lhs_ref.ty_layout.ty,
+                        rhs_ref.ty_layout.ty,
+                    )),
                 )
             }
         }

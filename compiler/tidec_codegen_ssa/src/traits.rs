@@ -197,7 +197,7 @@ pub trait BuilderMethods<'a, 'be>: Sized + CodegenBackendTypes {
     /// Build a signed integer division instruction for the given values.
     fn build_sdiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
     /// Build an unsigned integer division instruction for the given values.
-    fn build_udiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;    
+    fn build_udiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
 
     /// Build a store instruction to store the given value to the given place reference.
     /// This is used to store a value to memory.
