@@ -45,6 +45,15 @@ impl Local {
     }
 }
 
+impl Into<Place> for Local {
+    fn into(self) -> Place {
+        Place {
+            local: self,
+            projection: vec![],
+        }
+    }
+}
+
 #[derive(Debug)]
 /// Represents a memory location (or "place") within TIR that can be used
 /// as the target of assignments or the source of loads.
@@ -139,9 +148,17 @@ pub enum RValue {
     /// TODO: Consider separating this into a dedicated `Operand` enum with variants like
     /// `Const`, `Copy`, and `Move` for clarity and future extensibility.
     Const(ConstOperand),
+    /// A place value.
+    /// 
+    /// This represents a value located at a specific memory location.
+    /// It can be used to read from or write to that location.
+    /// For example, loading a value from a variable or a field of a struct.
+    /// Currently, this is a placeholder and should be expanded with more details.
+    Use(Place),
 }
 
 #[derive(Debug)]
+/// Semantically, a constant is already a value; it cannot change.
 // TODO(bruzzone): Add more variants for different constant types.
 pub enum ConstOperand {
     /// A constant value that can be used in the TIR.
