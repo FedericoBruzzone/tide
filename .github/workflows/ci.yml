@@ -53,6 +53,7 @@ jobs:
       # -------------------------------
       - name: Restore LLVM cache (Linux/macOS)
         id: cache-llvm-restore-unix
+        if: runner.os != 'Windows'
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.LLVM_INSTALL_PATH_UNIX }}
@@ -70,7 +71,7 @@ jobs:
       # Build LLVM if cache missed
       # -------------------------------
       - name: Build LLVM (Linux/macOS)
-        if: steps.cache-llvm-restore-unix.outputs.cache-hit != 'true'
+        if: steps.cache-llvm-restore-unix.outputs.cache-hit != 'true' && runner.os != 'Windows'
         shell: bash
         run: |
           git clone --depth 1 --branch ${{ env.LLVM_BRANCH }} https://github.com/llvm/llvm-project.git
@@ -112,7 +113,7 @@ jobs:
       # Save LLVM cache always
       # -------------------------------
       - name: Save LLVM cache (Linux/macOS)
-        if: always()
+        if: always() && runner.os != 'Windows'
         uses: actions/cache/save@v4
         with:
           path: ${{ env.LLVM_INSTALL_PATH_UNIX }}
@@ -138,7 +139,8 @@ jobs:
       # -------------------------------
       # Set LLVM_SYS_201_PREFIX environment variable for llvm-sys crate
       # -------------------------------
-      - name: Set LLVM_SYS_201_PREFIX (Unix)
+      - name: Set LLVM_SYS_201_PREFIX (Linux/macOS)
+        if : runner.os != 'Windows'
         shell: bash
         run: |
           echo "LLVM_SYS_201_PREFIX=${{ env.LLVM_INSTALL_PATH_UNIX }}" >> $GITHUB_ENV
@@ -153,7 +155,8 @@ jobs:
       # -------------------------------
       # Add LLVM to PATH
       # -------------------------------
-      - name: Add LLVM to path (Unix)
+      - name: Add LLVM to path (Linux/macOS)
+        if: runner.os != 'Windows'
         shell: bash
         run: echo "${{ env.LLVM_INSTALL_PATH_UNIX }}/bin" >> $GITHUB_PATH
 
