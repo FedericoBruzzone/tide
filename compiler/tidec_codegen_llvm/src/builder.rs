@@ -4,7 +4,7 @@ use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue};
 use inkwell::{basic_block::BasicBlock, builder::Builder};
 use tidec_abi::layout::{BackendRepr, Primitive, TyAndLayout};
 use tidec_abi::size_and_align::{Align, Size};
-use tidec_codegen_ssa::lir::{OperandRef, PlaceRef};
+use tidec_codegen_ssa::tir::{OperandRef, PlaceRef};
 use tidec_codegen_ssa::traits::{BuilderMethods, CodegenBackendTypes};
 use tidec_tir::syntax::{ConstScalar, TirTy};
 use tracing::instrument;

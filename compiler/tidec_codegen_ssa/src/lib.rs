@@ -1,3 +1,3 @@
 pub mod entry;
-pub mod lir;
+pub mod tir;
 pub mod traits;

@@ -1,5 +1,5 @@
 use crate::{
-    lir::{OperandVal, PlaceRef},
+    tir::{OperandVal, PlaceRef},
     traits::LayoutOf,
 };
 use tidec_abi::calling_convention::function::{FnAbi, PassMode};
@@ -12,7 +12,7 @@ use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, info, instrument};
 
 use crate::{
-    lir::{LocalRef, OperandRef},
+    tir::{LocalRef, OperandRef},
     traits::BuilderMethods,
 };
 
