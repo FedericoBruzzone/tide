@@ -164,6 +164,12 @@ pub trait BuilderMethods<'a, 'be>: Sized + CodegenBackendTypes {
     /// This is used to load a value from memory.
     fn load_operand(&mut self, place_ref: &PlaceRef<Self::Value>) -> OperandRef<Self::Value>;
 
+    /// Build a floating-point negation instruction for the given value.
+    fn build_fneg(&mut self, val: Self::Value) -> Self::Value;
+
+    /// Build an integer negation instruction for the given value.
+    fn build_neg(&self, val: Self::Value) -> Self::Value;
+
     /// Build a store instruction to store the given value to the given place reference.
     /// This is used to store a value to memory.
     /// The value is assumed to be of the same type as the place reference.
