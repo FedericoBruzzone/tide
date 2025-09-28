@@ -127,10 +127,6 @@ pub struct Body(usize);
 /// It corresponds to expressions on the right-hand side of assignments or
 /// the values returned by function calls in source code.
 ///
-/// This enum is currently minimal and only supports **constant values** (`Const`).
-/// Other kinds of RValues, such as copies, moves, or references, may be added
-/// in the future.
-///
 /// For example,
 /// ```rust
 /// let x = 5;
@@ -139,6 +135,30 @@ pub struct Body(usize);
 /// let s = "hi";      // `"hi"` is an operand (a fat pointer and length)
 /// ```
 pub enum RValue {
+    /// An operand value.
+    Operand(Operand),
+    /// A unary operation applied to an operand. The operand's type is preserved.
+    /// 
+    /// For example, negation (`-x`), logical not (`!x`), or bitwise not (`~x`).
+    UnaryOp(UnaryOp, Operand),
+}
+
+#[derive(Debug)]
+pub enum UnaryOp {
+    /// Arithmetic negation.
+    Neg, 
+}
+
+#[derive(Debug)]
+// TODO(bruzzone): consider to switch to `copy` and `move` semantic, instead of `use`
+pub enum Operand {
+    /// A place value.
+    ///
+    /// This represents a value located at a specific memory location.
+    /// It can be used to read from or write to that location.
+    /// For example, loading a value from a variable or a field of a struct.
+    /// Currently, this is a placeholder and should be expanded with more details.
+    Use(Place),
     /// A constant value.
     ///
     /// Wraps a `ConstOperand`, which represents a constant known at compile-time.
@@ -148,13 +168,6 @@ pub enum RValue {
     /// TODO: Consider separating this into a dedicated `Operand` enum with variants like
     /// `Const`, `Copy`, and `Move` for clarity and future extensibility.
     Const(ConstOperand),
-    /// A place value.
-    /// 
-    /// This represents a value located at a specific memory location.
-    /// It can be used to read from or write to that location.
-    /// For example, loading a value from a variable or a field of a struct.
-    /// Currently, this is a placeholder and should be expanded with more details.
-    Use(Place),
 }
 
 #[derive(Debug)]
