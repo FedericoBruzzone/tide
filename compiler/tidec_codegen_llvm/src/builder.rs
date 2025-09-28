@@ -192,6 +192,16 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
         load_inst
     }
 
+    fn build_fneg(&mut self, val: Self::Value) -> Self::Value {
+        assert!(val.get_type().is_float_type());
+        self.ll_builder.build_float_neg(val.into_float_value(), "fneg").unwrap().into()
+    }
+
+    fn build_neg(&self, val: Self::Value) -> Self::Value {
+        assert!(val.get_type().is_int_type());
+        self.ll_builder.build_int_neg(val.into_int_value(), "neg").unwrap().into()
+    }
+
     fn const_scalar_to_backend_value(
         &self,
         const_scalar: ConstScalar,
