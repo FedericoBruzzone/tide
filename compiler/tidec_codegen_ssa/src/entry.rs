@@ -5,7 +5,7 @@ use crate::{
 use tidec_abi::calling_convention::function::{FnAbi, PassMode};
 use tidec_tir::{
     basic_blocks::{BasicBlock, BasicBlockData},
-    syntax::{Local, RETURN_LOCAL, RValue, Statement, Terminator, TirTy},
+    syntax::{Local, Place, RETURN_LOCAL, RValue, Statement, Terminator, TirTy},
     tir::TirBody,
 };
 use tidec_utils::index_vec::IdxVec;
@@ -141,9 +141,18 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
             RValue::Const(const_operand) => {
                 OperandRef::from_const(builder, const_operand.value(), const_operand.ty())
             }
+            RValue::Use(place) => {
+                let place_ref = self.codegen_place(place);
+                builder.load_operand(&place_ref)
+            }
         }
     }
 
+    /// Overwrite the local reference for the given local.
+    /// This is used to update the local reference when we have a pending operand ref
+    /// that needs to be replaced with a concrete operand ref.
+    /// This is typically done when we first create a pending operand ref
+    /// and then later we codegen the rvalue and get the actual operand ref.
     fn overwrite_local(&mut self, local: Local, new_ref: LocalRef<B::Value>) {
         self.locals[local] = new_ref;
     }
@@ -170,7 +179,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
             }
             PassMode::Direct => {
                 info!("Handling direct return");
-                let operand_ref = self.codegen_consume(builder, RETURN_LOCAL);
+                let operand_ref = self.codegen_consume(builder, RETURN_LOCAL.into());
                 match operand_ref.operand_val {
                     OperandVal::Zst => todo!("Handle return of ZST. Should be unreachable?"),
                     OperandVal::Ref(_) => todo!("Handle return by reference — load from place"),
@@ -185,33 +194,63 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
         builder.build_return(Some(be_val));
     }
 
-    fn codegen_consume(&mut self, builder: &mut B, local: Local) -> OperandRef<B::Value> {
+    #[instrument(level = "debug", skip(self, builder))]
+    /// Codegen a consume of the given TIR place.
+    /// This function generates the code to load the value from the place.
+    /// It handles different cases based on the layout of the place.
+    /// For example, if the place is a ZST, it returns a ZST operand.
+    /// If the place is already an operand ref, it returns it directly.
+    /// Otherwise, it generates the place and loads the value from it.
+    fn codegen_consume(&mut self, builder: &mut B, place: Place) -> OperandRef<B::Value> {
         let layout = builder
             .ctx()
-            .layout_of(self.lir_body.ret_and_args[local].ty);
+            .layout_of(self.lir_body.ret_and_args[place.local].ty);
 
         if layout.is_zst() {
             return OperandRef::new_zst(layout);
         }
 
-        let local_ref = &self.locals[local];
-        match local_ref {
+        if let Some(operand_ref) = self.try_codegen_consume_operand(&place) {
+            return operand_ref;
+        }
+
+        let place_ref = self.codegen_place(&place);
+        builder.load_operand(&place_ref)
+    }
+
+    fn try_codegen_consume_operand(&self, place: &Place) -> Option<OperandRef<B::Value>> {
+        match self.locals[place.local] {
             LocalRef::OperandRef(operand_ref) => {
                 // TODO(bruzzone): we should handle projections here
-                *operand_ref
+                Some(operand_ref)
             }
-            LocalRef::PlaceRef(place_ref) => builder.load_operand(place_ref),
+            _ => None,
+        }
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    /// Codegen the given TIR place.
+    /// This function generates the place reference for the given TIR place.
+    /// It currently only handles local places.
+    // TODO(bruzzone): consider add the builder as parameter to this function
+    fn codegen_place(&mut self, place: &Place) -> PlaceRef<B::Value> {
+        let local = place.local;
+        match self.locals[local] {
+            LocalRef::PlaceRef(place_ref) => place_ref,
+            LocalRef::OperandRef(operand_ref) => {
+                panic!(
+                    "Cannot convert an operand ref {:?} to a place ref for local {:?}",
+                    operand_ref, local
+                );
+            }
             LocalRef::PendingOperandRef => {
                 panic!(
                     "Cannot consume a pending operand ref {:?} before it is defined",
-                    local_ref
+                    local
                 );
             }
         }
 
-        // for most places, to consume them we just load them
-        // out from their home
-        // let place = self.codegen_place(bx, place_ref);
-        // bx.load_operand(place)
+        // TODO(bruzzone): handle projections
     }
 }
