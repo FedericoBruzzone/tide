@@ -3,6 +3,8 @@ use std::num::NonZero;
 use tidec_abi::size_and_align::Size;
 use tidec_utils::idx::Idx;
 
+use crate::tir::TirCtx;
+
 #[derive(Debug, Copy, Clone)]
 pub enum TirTy {
     I8,
@@ -29,6 +31,13 @@ pub enum TirTy {
 impl TirTy {
     pub fn is_floating_point(&self) -> bool {
         matches!(self, TirTy::F16 | TirTy::F32 | TirTy::F64 | TirTy::F128)
+    }
+
+    pub fn is_signed_integer(&self) -> bool {
+        matches!(
+            self,
+            TirTy::I8 | TirTy::I16 | TirTy::I32 | TirTy::I64 | TirTy::I128
+        )
     }
 }
 
@@ -147,12 +156,57 @@ pub enum RValue {
     ///
     /// For example, negation (`-x`), logical not (`!x`), or bitwise not (`~x`).
     UnaryOp(UnaryOp, Operand),
+    /// A binary operation applied to two operands. The result type is the same as the operands' type.
+    ///
+    /// For example, addition (`x + y`), subtraction (`x - y`), multiplication (`x * y`), etc.
+    BinaryOp(BinaryOp, Operand, Operand),
 }
 
 #[derive(Debug)]
 pub enum UnaryOp {
     /// Arithmetic negation.
     Neg,
+}
+
+#[derive(Debug)]
+pub enum BinaryOp {
+    /// Addition.
+    Add,
+    /// Addition but with UB on overflow (Integer only)
+    AddUnchecked,
+    /// Subtraction.
+    Sub,
+    /// Subtraction but with UB on overflow (Integer only).
+    SubUnchecked,
+    /// Multiplication.
+    Mul,
+    /// Multiplication but with UB on overflow (Integer only).
+    MulUnchecked,
+    /// Division.
+    ///
+    /// For integer types, division by zero is UB.
+    /// `MIN / -1` is UB for signed integers because it overflows.
+    ///
+    /// Floating-point division by zero is safe, and does not need guards.
+    // TODO(bruzzone): tide might add checks for UBs in Div.
+    Div,
+}
+
+impl BinaryOp {
+    /// Returns the resulting type of the binary operation, which is the same as the operand types.
+    pub fn ty(&self, tir_ctx: &TirCtx, lhs_ty: TirTy, rhs_ty: TirTy) -> TirTy {
+        let _ = tir_ctx;
+        let _ = rhs_ty;
+        match self {
+            BinaryOp::Add
+            | BinaryOp::AddUnchecked
+            | BinaryOp::Sub
+            | BinaryOp::SubUnchecked
+            | BinaryOp::Mul
+            | BinaryOp::MulUnchecked
+            | BinaryOp::Div => lhs_ty,
+        }
+    }
 }
 
 #[derive(Debug)]

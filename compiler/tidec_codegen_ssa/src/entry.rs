@@ -1,11 +1,14 @@
 use crate::{
     tir::{OperandVal, PlaceRef},
-    traits::LayoutOf,
+    traits::{CodegenMethods, LayoutOf},
 };
-use tidec_abi::calling_convention::function::{FnAbi, PassMode};
+use tidec_abi::{
+    calling_convention::function::{FnAbi, PassMode},
+    layout::TyAndLayout,
+};
 use tidec_tir::{
     basic_blocks::{BasicBlock, BasicBlockData},
-    syntax::{Local, Operand, Place, RETURN_LOCAL, RValue, Statement, Terminator, TirTy},
+    syntax::{BinaryOp, Local, Operand, Place, RETURN_LOCAL, RValue, Statement, Terminator, TirTy},
     tir::TirBody,
 };
 use tidec_utils::index_vec::IdxVec;
@@ -163,6 +166,108 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
                     }
                 };
                 OperandRef::new_immediate(operand_val, ty_layout)
+            }
+            RValue::BinaryOp(bin_op, lhs, rhs) => {
+                let lhs_ref = self.codegen_operand(builder, lhs);
+                let rhs_ref = self.codegen_operand(builder, rhs);
+
+                let operand_val = match (lhs_ref.operand_val, rhs_ref.operand_val) {
+                    (OperandVal::Immediate(lhs_val), OperandVal::Immediate(rhs_val)) => self
+                        .codegen_scalar_binary_op(
+                            builder,
+                            bin_op,
+                            lhs_val,
+                            rhs_val,
+                            lhs_ref.ty_layout,
+                        ),
+                    (
+                        OperandVal::Pair(_lhs_addr, _lhs_extra),
+                        OperandVal::Pair(_rhs_addr, _rhs_extra),
+                    ) => {
+                        // Wide pointer binary operations are not supported yet.
+                        todo!("Handle binary operations on pairs (wide pointers)")
+                    }
+                    _ => panic!(
+                        "Binary operations on non-immediate or non-pair operands are not supported"
+                    ),
+                };
+
+                OperandRef::new_immediate(
+                    operand_val,
+                    builder.ctx()
+                        .layout_of(bin_op.ty(builder.ctx().tir_ctx(), lhs_ref.ty_layout.ty, rhs_ref.ty_layout.ty)),
+                )
+            }
+        }
+    }
+
+    /// Codegen a scalar binary operation.
+    /// This function generates the code for the binary operation and returns the resulting value.
+    ///
+    /// Note that we only need the type layout of the lhs because
+    /// in the TIR, both operands of a binary operation must have the same type.
+    fn codegen_scalar_binary_op(
+        &mut self,
+        builder: &mut B,
+        bin_op: &BinaryOp,
+        lhs: B::Value,
+        rhs: B::Value,
+        lhs_ty_layout: TyAndLayout<TirTy>,
+    ) -> B::Value {
+        let is_float = lhs_ty_layout.ty.is_floating_point();
+        let is_signed = lhs_ty_layout.ty.is_signed_integer();
+
+        match bin_op {
+            BinaryOp::Add => {
+                if is_float {
+                    builder.build_fadd(lhs, rhs)
+                } else {
+                    builder.build_add(lhs, rhs)
+                }
+            }
+            BinaryOp::AddUnchecked => {
+                if is_signed {
+                    builder.build_sadd_unchecked(lhs, rhs)
+                } else {
+                    builder.build_uadd_unchecked(lhs, rhs)
+                }
+            }
+            BinaryOp::Sub => {
+                if is_float {
+                    builder.build_fsub(lhs, rhs)
+                } else {
+                    builder.build_sub(lhs, rhs)
+                }
+            }
+            BinaryOp::SubUnchecked => {
+                if is_signed {
+                    builder.build_ssub_unchecked(lhs, rhs)
+                } else {
+                    builder.build_usub_unchecked(lhs, rhs)
+                }
+            }
+            BinaryOp::Mul => {
+                if is_float {
+                    builder.build_fmul(lhs, rhs)
+                } else {
+                    builder.build_mul(lhs, rhs)
+                }
+            }
+            BinaryOp::MulUnchecked => {
+                if is_signed {
+                    builder.build_smul_unchecked(lhs, rhs)
+                } else {
+                    builder.build_umul_unchecked(lhs, rhs)
+                }
+            }
+            BinaryOp::Div => {
+                if is_float {
+                    builder.build_fdiv(lhs, rhs)
+                } else if is_signed {
+                    builder.build_sdiv(lhs, rhs)
+                } else {
+                    builder.build_udiv(lhs, rhs)
+                }
             }
         }
     }
