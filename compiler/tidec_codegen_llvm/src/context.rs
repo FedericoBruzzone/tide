@@ -214,7 +214,7 @@ impl<'ll> CodegenMethods<'ll> for CodegenCtx<'ll> {
         }
     }
 
-    fn lir_ctx(&self) -> &TirCtx {
+    fn tir_ctx(&self) -> &TirCtx {
         &self.lir_ctx
     }
 
@@ -263,7 +263,7 @@ impl<'ll> CodegenMethods<'ll> for CodegenCtx<'ll> {
                 .expect("Failed to create target machine")
         };
 
-        match self.lir_ctx().emit_kind() {
+        match self.tir_ctx().emit_kind() {
             EmitKind::Object => {
                 let target_machine = target_machine();
                 let obj_path = format!("{}.o", self.ll_module.get_name().to_str().unwrap());

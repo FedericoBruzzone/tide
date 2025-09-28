@@ -231,7 +231,7 @@ pub fn codegen_lir_body<'a, 'be, B: BuilderMethods<'a, 'be>>(
     ctx: &'a B::CodegenCtx,
     lir_body: &'a TirBody,
 ) {
-    let fn_abi = ctx.fn_abi_of(ctx.lir_ctx(), &lir_body.ret_and_args);
+    let fn_abi = ctx.fn_abi_of(ctx.tir_ctx(), &lir_body.ret_and_args);
     let fn_value = ctx.get_or_define_fn(&lir_body.metadata, &lir_body.ret_and_args);
     let entry_bb = B::append_basic_block(ctx, fn_value, "entry");
     let mut start_builder = B::build(ctx, entry_bb);
