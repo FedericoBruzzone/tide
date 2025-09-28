@@ -5,7 +5,7 @@ use crate::{
 use tidec_abi::calling_convention::function::{FnAbi, PassMode};
 use tidec_tir::{
     basic_blocks::{BasicBlock, BasicBlockData},
-    syntax::{Local, Place, RETURN_LOCAL, RValue, Statement, Terminator, TirTy},
+    syntax::{Local, Operand, Place, RETURN_LOCAL, RValue, Statement, Terminator, TirTy},
     tir::TirBody,
 };
 use tidec_utils::index_vec::IdxVec;
@@ -132,19 +132,47 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
         todo!("Implement codegen_rvalue");
     }
 
+    #[instrument(level = "debug", skip(self, builder))]
+    /// Codegen the given TIR rvalue and return the corresponding operand reference.
+    /// It generates the code for the rvalue and returns the operand reference.
     pub fn codegen_rvalue_operand(
         &mut self,
         builder: &mut B,
         rvalue: &RValue,
     ) -> OperandRef<B::Value> {
         match rvalue {
-            RValue::Const(const_operand) => {
+            RValue::Operand(operand) => self.codegen_operand(builder, operand),
+            RValue::UnaryOp(unary_op, operand) => {
+                let OperandRef {
+                    operand_val,
+                    ty_layout,
+                } = self.codegen_operand(builder, operand);
+                let is_float = ty_layout.ty.is_floating_point();
+
+                // Only immediate operands are supported because we need to generate
+                // a single instruction for the unary operation.
+                assert!(operand_val.is_immediate());
+
+                let operand_val = match unary_op {
+                    tidec_tir::syntax::UnaryOp::Neg => {
+                        if is_float {
+                            builder.build_fneg(operand_val.immediate())
+                        } else {
+                            builder.build_neg(operand_val.immediate())
+                        }
+                    }
+                };
+                OperandRef::new_immediate(operand_val, ty_layout)
+            }
+        }
+    }
+
+    fn codegen_operand(&mut self, builder: &mut B, operand: &Operand) -> OperandRef<B::Value> {
+        match operand {
+            Operand::Const(const_operand) => {
                 OperandRef::from_const(builder, const_operand.value(), const_operand.ty())
             }
-            RValue::Use(place) => {
-                let place_ref = self.codegen_place(place);
-                builder.load_operand(&place_ref)
-            }
+            Operand::Use(place) => self.codegen_consume(builder, place),
         }
     }
 
@@ -154,6 +182,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     /// This is typically done when we first create a pending operand ref
     /// and then later we codegen the rvalue and get the actual operand ref.
     fn overwrite_local(&mut self, local: Local, new_ref: LocalRef<B::Value>) {
+        debug!("Overwriting local {:?} with {:?}", local, new_ref);
         self.locals[local] = new_ref;
     }
 
@@ -179,7 +208,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
             }
             PassMode::Direct => {
                 info!("Handling direct return");
-                let operand_ref = self.codegen_consume(builder, RETURN_LOCAL.into());
+                let operand_ref = self.codegen_consume(builder, &RETURN_LOCAL.into());
                 match operand_ref.operand_val {
                     OperandVal::Zst => todo!("Handle return of ZST. Should be unreachable?"),
                     OperandVal::Ref(_) => todo!("Handle return by reference — load from place"),
@@ -201,7 +230,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     /// For example, if the place is a ZST, it returns a ZST operand.
     /// If the place is already an operand ref, it returns it directly.
     /// Otherwise, it generates the place and loads the value from it.
-    fn codegen_consume(&mut self, builder: &mut B, place: Place) -> OperandRef<B::Value> {
+    fn codegen_consume(&mut self, builder: &mut B, place: &Place) -> OperandRef<B::Value> {
         let layout = builder
             .ctx()
             .layout_of(self.lir_body.ret_and_args[place.local].ty);
@@ -210,11 +239,11 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
             return OperandRef::new_zst(layout);
         }
 
-        if let Some(operand_ref) = self.try_codegen_consume_operand(&place) {
+        if let Some(operand_ref) = self.try_codegen_consume_operand(place) {
             return operand_ref;
         }
 
-        let place_ref = self.codegen_place(&place);
+        let place_ref = self.codegen_place(place);
         builder.load_operand(&place_ref)
     }
 
