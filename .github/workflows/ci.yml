@@ -140,7 +140,7 @@ jobs:
       # Set LLVM_SYS_201_PREFIX environment variable for llvm-sys crate
       # -------------------------------
       - name: Set LLVM_SYS_201_PREFIX (Linux/macOS)
-        if : runner.os != 'Windows'
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           echo "LLVM_SYS_201_PREFIX=${{ env.LLVM_INSTALL_PATH_UNIX }}" >> $GITHUB_ENV
