@@ -26,6 +26,13 @@ pub enum TirTy {
     Metadata,
 }
 
+impl TirTy {
+    pub fn is_floating_point(&self) -> bool {
+        matches!(self, TirTy::F16 | TirTy::F32 | TirTy::F64 | TirTy::F128)
+    }
+
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 /// A `Local` variable in the TIR.
 ///

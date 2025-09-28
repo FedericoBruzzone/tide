@@ -120,6 +120,20 @@ pub enum OperandVal<V: std::fmt::Debug> {
     Ref(PlaceVal<V>),
 }
 
+impl<T: std::fmt::Debug> OperandVal<T> {
+    /// Check if the operand is represented as an immediate value.
+    pub fn is_immediate(&self) -> bool {
+        matches!(self, OperandVal::Immediate(_))
+    }
+
+    pub fn immediate(self) -> T {
+        match self {
+            OperandVal::Immediate(v) => v,
+            _ => panic!("OperandVal is not immediate: {:?}", self),
+        }
+    }
+}
+
 impl<'a, 'be, V: Copy + PartialEq + std::fmt::Debug> PlaceRef<V> {
     pub fn alloca<B: BuilderMethods<'a, 'be, Value = V>>(
         builder: &mut B,
