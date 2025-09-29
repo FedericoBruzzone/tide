@@ -2,6 +2,7 @@ use crate::{
     basic_blocks::{BasicBlock, BasicBlockData},
     layout_ctx::LayoutCtx,
     syntax::{Body, Local, LocalData, TirTy},
+    visitor::Visitor,
 };
 use tidec_abi::{
     layout::TyAndLayout,
@@ -261,6 +262,15 @@ pub struct TirBody {
 
     /// The basic blocks of the function.
     pub basic_blocks: IdxVec<BasicBlock, BasicBlockData>,
+}
+
+impl TirBody {
+    pub fn visit<'tir, V>(&'tir self, visitor: &mut V)
+    where
+        V: Visitor<'tir>,
+    {
+        visitor.visit_body(self)
+    }
 }
 
 /// The metadata of a TIR unit (module).
