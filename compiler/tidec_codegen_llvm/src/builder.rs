@@ -25,7 +25,7 @@ macro_rules! impl_arithmetic_ops {
                 .into()
         }
     };
-    
+
     // Float operations
     (float, $method_name:ident, $llvm_method:ident, $op_name:literal, $doc:literal) => {
         #[doc = $doc]
@@ -37,7 +37,7 @@ macro_rules! impl_arithmetic_ops {
                 .into()
         }
     };
-    
+
     // Integer operations with overflow flags (nsw/nuw) and documentation
     (int_overflow, $method_name:ident, $llvm_method:ident, $op_name:literal, $doc:literal) => {
         #[doc = $doc]
