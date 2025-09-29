@@ -12,6 +12,45 @@ use tracing::instrument;
 use crate::context::CodegenCtx;
 use crate::tir::tir_ty::BasicTypesUtils;
 
+/// Macro for generating arithmetic operation methods
+macro_rules! impl_arithmetic_ops {
+    // Integer operations
+    (int, $method_name:ident, $llvm_method:ident, $op_name:literal, $doc:literal) => {
+        #[doc = $doc]
+        fn $method_name(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+            assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+            self.ll_builder
+                .$llvm_method(lhs.into_int_value(), rhs.into_int_value(), $op_name)
+                .unwrap()
+                .into()
+        }
+    };
+    
+    // Float operations
+    (float, $method_name:ident, $llvm_method:ident, $op_name:literal, $doc:literal) => {
+        #[doc = $doc]
+        fn $method_name(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+            assert!(lhs.get_type().is_float_type() && rhs.get_type().is_float_type());
+            self.ll_builder
+                .$llvm_method(lhs.into_float_value(), rhs.into_float_value(), $op_name)
+                .unwrap()
+                .into()
+        }
+    };
+    
+    // Integer operations with overflow flags (nsw/nuw) and documentation
+    (int_overflow, $method_name:ident, $llvm_method:ident, $op_name:literal, $doc:literal) => {
+        #[doc = $doc]
+        fn $method_name(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+            assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+            self.ll_builder
+                .$llvm_method(lhs.into_int_value(), rhs.into_int_value(), $op_name)
+                .unwrap()
+                .into()
+        }
+    };
+}
+
 /// A builder for generating LLVM IR code.
 ///
 /// This struct wraps the `inkwell::builder::Builder` and provides
@@ -208,140 +247,40 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
             .into()
     }
 
-    fn build_add(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_add(lhs.into_int_value(), rhs.into_int_value(), "add")
-            .unwrap()
-            .into()
-    }
+    // Basic integer arithmetic operations
+    impl_arithmetic_ops!(int, build_add, build_int_add, "add",
+        "Integer addition.\n\n`build_int_add` is a helper on an LLVM IR builder wrapper that generates an integer addition instruction.");
+    impl_arithmetic_ops!(int, build_sub, build_int_sub, "sub",
+        "Integer subtraction.\n\n`build_int_sub` is a helper on an LLVM IR builder wrapper that generates an integer subtraction instruction.");
+    impl_arithmetic_ops!(int, build_mul, build_int_mul, "mul",
+        "Integer multiplication.\n\n`build_int_mul` is a helper on an LLVM IR builder wrapper that generates an integer multiplication instruction.");
+    impl_arithmetic_ops!(int, build_sdiv, build_int_signed_div, "sdiv",
+        "Signed integer division.\n\n`build_int_signed_div` is a helper on an LLVM IR builder wrapper that generates a signed integer division instruction.");
+    impl_arithmetic_ops!(int, build_udiv, build_int_unsigned_div, "udiv",
+        "Unsigned integer division.\n\n`build_int_unsigned_div` is a helper on an LLVM IR builder wrapper that generates an unsigned integer division instruction.");
 
-    fn build_sub(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_sub(lhs.into_int_value(), rhs.into_int_value(), "sub")
-            .unwrap()
-            .into()
-    }
+    // Float arithmetic operations
+    impl_arithmetic_ops!(float, build_fadd, build_float_add, "fadd",
+        "Floating-point addition.\n\n`build_float_add` is a helper on an LLVM IR builder wrapper that generates a floating-point addition instruction.");
+    impl_arithmetic_ops!(float, build_fsub, build_float_sub, "fsub",
+        "Floating-point subtraction.\n\n`build_float_sub` is a helper on an LLVM IR builder wrapper that generates a floating-point subtraction instruction.");
+    impl_arithmetic_ops!(float, build_fmul, build_float_mul, "fmul",
+        "Floating-point multiplication.\n\n`build_float_mul` is a helper on an LLVM IR builder wrapper that generates a floating-point multiplication instruction.");
+    impl_arithmetic_ops!(float, build_fdiv, build_float_div, "fdiv",
+        "Floating-point division.\n\n`build_float_div` is a helper on an LLVM IR builder wrapper that generates a floating-point division instruction.");
 
-    fn build_mul(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_mul(lhs.into_int_value(), rhs.into_int_value(), "mul")
-            .unwrap()
-            .into()
-    }
-
-    fn build_sdiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_signed_div(lhs.into_int_value(), rhs.into_int_value(), "sdiv")
-            .unwrap()
-            .into()
-    }
-
-    fn build_udiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_unsigned_div(lhs.into_int_value(), rhs.into_int_value(), "udiv")
-            .unwrap()
-            .into()
-    }
-
-    fn build_fadd(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_float_type() && rhs.get_type().is_float_type());
-        self.ll_builder
-            .build_float_add(lhs.into_float_value(), rhs.into_float_value(), "fadd")
-            .unwrap()
-            .into()
-    }
-
-    fn build_fsub(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_float_type() && rhs.get_type().is_float_type());
-        self.ll_builder
-            .build_float_sub(lhs.into_float_value(), rhs.into_float_value(), "fsub")
-            .unwrap()
-            .into()
-    }
-
-    fn build_fmul(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_float_type() && rhs.get_type().is_float_type());
-        self.ll_builder
-            .build_float_mul(lhs.into_float_value(), rhs.into_float_value(), "fmul")
-            .unwrap()
-            .into()
-    }
-
-    fn build_fdiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_float_type() && rhs.get_type().is_float_type());
-        self.ll_builder
-            .build_float_div(lhs.into_float_value(), rhs.into_float_value(), "fdiv")
-            .unwrap()
-            .into()
-    }
-
-    /// Signed addition with UB on overflow.
-    ///
-    /// `build_int_nsw_add`` is a helper on an LLVM IR builder wrapper that generates a signed integer addition instruction with the nsw flag, ensuring the operation is UB (undefined behavior) if signed overflow occurs.
-    fn build_sadd_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_nsw_add(lhs.into_int_value(), rhs.into_int_value(), "sadd")
-            .unwrap()
-            .into()
-    }
-
-    /// Unsigned addition with UB on overflow.
-    ///
-    /// `build_int_nuw_add` is a helper on an LLVM IR builder wrapper that generates an unsigned integer addition instruction with the nuw flag, ensuring the operation is UB (undefined behavior) if unsigned overflow occurs.
-    fn build_uadd_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_nuw_add(lhs.into_int_value(), rhs.into_int_value(), "uadd")
-            .unwrap()
-            .into()
-    }
-
-    /// Signed subtraction with UB on overflow.
-    ///
-    /// `build_int_nsw_sub` is a helper on an LLVM IR builder wrapper that generates a signed integer subtraction instruction with the nsw flag, ensuring the operation is UB (undefined behavior) if signed overflow occurs.
-    fn build_ssub_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_nsw_sub(lhs.into_int_value(), rhs.into_int_value(), "ssub")
-            .unwrap()
-            .into()
-    }
-
-    /// Unsigned subtraction with UB on overflow.
-    ///
-    /// `build_int_nuw_sub` is a helper on an LLVM IR builder wrapper that generates an unsigned integer subtraction instruction with the nuw flag, ensuring the operation is UB (undefined behavior) if unsigned overflow occurs.
-    fn build_usub_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_nuw_sub(lhs.into_int_value(), rhs.into_int_value(), "usub")
-            .unwrap()
-            .into()
-    }
-
-    /// Signed multiplication with UB on overflow.
-    ///
-    /// `build_int_nsw_mul` is a helper on an LLVM IR builder wrapper that generates a signed integer multiplication instruction with the nsw flag, ensuring the operation is UB (undefined behavior) if signed overflow occurs.
-    fn build_smul_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        self.ll_builder
-            .build_int_nsw_mul(lhs.into_int_value(), rhs.into_int_value(), "smul")
-            .unwrap()
-            .into()
-    }
-
-    /// Unsigned multiplication with UB on overflow.
-    ///
-    /// `build_int_nuw_mul` is a helper on an LLVM IR builder wrapper that generates an unsigned integer multiplication instruction with the nuw flag, ensuring the operation is UB (undefined behavior) if unsigned overflow occurs.
-    fn build_umul_unchecked(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
-        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
-        Self::build_mul(self, lhs, rhs)
-    }
+    impl_arithmetic_ops!(int_overflow, build_sadd_unchecked, build_int_nsw_add, "sadd", 
+        "Signed addition with UB on overflow.\n\n`build_int_nsw_add` is a helper on an LLVM IR builder wrapper that generates a signed integer addition instruction with the nsw flag, ensuring the operation is UB (undefined behavior) if signed overflow occurs.");
+    impl_arithmetic_ops!(int_overflow, build_uadd_unchecked, build_int_nuw_add, "uadd",
+        "Unsigned addition with UB on overflow.\n\n`build_int_nuw_add` is a helper on an LLVM IR builder wrapper that generates an unsigned integer addition instruction with the nuw flag, ensuring the operation is UB (undefined behavior) if unsigned overflow occurs.");
+    impl_arithmetic_ops!(int_overflow, build_ssub_unchecked, build_int_nsw_sub, "ssub",
+        "Signed subtraction with UB on overflow.\n\n`build_int_nsw_sub` is a helper on an LLVM IR builder wrapper that generates a signed integer subtraction instruction with the nsw flag, ensuring the operation is UB (undefined behavior) if signed overflow occurs.");
+    impl_arithmetic_ops!(int_overflow, build_usub_unchecked, build_int_nuw_sub, "usub",
+        "Unsigned subtraction with UB on overflow.\n\n`build_int_nuw_sub` is a helper on an LLVM IR builder wrapper that generates an unsigned integer subtraction instruction with the nuw flag, ensuring the operation is UB (undefined behavior) if unsigned overflow occurs.");
+    impl_arithmetic_ops!(int_overflow, build_smul_unchecked, build_int_nsw_mul, "smul",
+        "Signed multiplication with UB on overflow.\n\n`build_int_nsw_mul` is a helper on an LLVM IR builder wrapper that generates a signed integer multiplication instruction with the nsw flag, ensuring the operation is UB (undefined behavior) if signed overflow occurs.");
+    impl_arithmetic_ops!(int_overflow, build_umul_unchecked, build_int_nuw_mul, "umul",
+        "Unsigned multiplication with UB on overflow.\n\n`build_int_nuw_mul` is a helper on an LLVM IR builder wrapper that generates an unsigned integer multiplication instruction with the nuw flag, ensuring the operation is UB (undefined behavior) if unsigned overflow occurs.");
 
     fn const_scalar_to_backend_value(
         &self,
