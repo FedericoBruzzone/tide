@@ -3,7 +3,6 @@ use std::num::NonZero;
 //
 use tidec_abi::target::{BackendKind, TirTarget};
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
-use tidec_codegen_llvm::tir::tir_body_metadata;
 use tidec_tir::body::{
     CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirItemKind, TirUnit,
     TirUnitMetadata, UnnamedAddress, Visibility,
@@ -14,7 +13,6 @@ use tidec_tir::syntax::{
 };
 use tidec_tir::ty::TirTy;
 use tidec_utils::index_vec::IdxVec;
-use tidec_utils::interner::Interner;
 use tracing::debug;
 
 // TIDEC_LOG=debug cargo run; cc main.o -o a.out; ./a.out; echo $?
