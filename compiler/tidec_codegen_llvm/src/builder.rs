@@ -9,7 +9,6 @@ use tidec_codegen_ssa::traits::{BuilderMethods, CodegenBackendTypes};
 use tidec_tir::syntax::ConstScalar;
 use tidec_tir::TirTy;
 use tracing::instrument;
-
 use crate::context::CodegenCtx;
 use crate::tir::tir_ty::BasicTypesUtils;
 
@@ -70,24 +69,24 @@ impl<'ll, 'ctx> Deref for CodegenBuilder<'_, 'll, 'ctx> {
 }
 
 impl<'ll, 'ctx> CodegenBackendTypes for CodegenBuilder<'_, 'll, 'ctx> {
-    type BasicBlock = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::BasicBlock;
-    type Type = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::Type;
-    type Value = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::Value;
-    type FunctionType = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::FunctionType;
-    type FunctionValue = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::FunctionValue;
-    type MetadataType = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::MetadataType;
-    type MetadataValue = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::MetadataValue;
+    type BasicBlock = <CodegenCtx<'ctx, 'll> as CodegenBackendTypes>::BasicBlock;
+    type Type = <CodegenCtx<'ctx, 'll> as CodegenBackendTypes>::Type;
+    type Value = <CodegenCtx<'ctx, 'll> as CodegenBackendTypes>::Value;
+    type FunctionType = <CodegenCtx<'ctx, 'll> as CodegenBackendTypes>::FunctionType;
+    type FunctionValue = <CodegenCtx<'ctx, 'll> as CodegenBackendTypes>::FunctionValue;
+    type MetadataType = <CodegenCtx<'ctx, 'll> as CodegenBackendTypes>::MetadataType;
+    type MetadataValue = <CodegenCtx<'ctx, 'll> as CodegenBackendTypes>::MetadataValue;
 }
 
 impl<'a, 'll, 'ctx> CodegenBuilder<'a, 'll, 'ctx> {
     #[instrument(skip(ctx))]
-    pub fn with_ctx(ctx: &'a CodegenCtx<'ll, 'ctx>) -> Self {
+    pub fn with_ctx(ctx: &'a CodegenCtx<'ctx, 'll>) -> Self {
         let ll_builder = ctx.ll_context.create_builder();
         CodegenBuilder { ll_builder, ctx }
     }
 }
 
-impl<'a, 'll, 'ctx> BuilderMethods<'ll, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
+impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
     type CodegenCtx = CodegenCtx<'ctx, 'll>;
 
     fn ctx(&self) -> &Self::CodegenCtx {

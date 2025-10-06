@@ -1,15 +1,15 @@
 use std::num::NonZero;
 // #[macro_use] extern crate tidec_utils;
 //
-use tidec_abi::target::BackendKind;
+use tidec_abi::target::{BackendKind, TirTarget};
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
-use tidec_tir::basic_blocks::BasicBlockData;
+use tidec_tir::ctx::{EmitKind, TirArgs, TirCtx};
 use tidec_tir::syntax::{
     ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue, RawScalarValue,
-    Statement, Terminator, TirTy, UnaryOp, RETURN_LOCAL,
+    Statement, Terminator, UnaryOp, RETURN_LOCAL,
 };
 use tidec_tir::body::{
-    CallConv, DefId, EmitKind, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirCtx, TirItemKind,
+    CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirItemKind,
     TirUnit, TirUnitMetadata, UnnamedAddress, Visibility,
 };
 use tidec_utils::index_vec::IdxVec;
@@ -23,6 +23,7 @@ fn main() {
 
     let target = TirTarget::new(BackendKind::Llvm);
     let arguments = TirArgs { emit_kind: EmitKind::LlvmIr };
+    let intern_ctx = Inte
 
     // TODO: check valitiy of TideArgs
     let lir_ctx = TirCtx {
