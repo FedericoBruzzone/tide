@@ -3,29 +3,30 @@ use crate::{
     target::AddressSpace,
 };
 
+
 #[derive(Debug, Clone, Copy)]
 /// Represents a type along with its size and alignment information.
 ///
 /// This is commonly used during codegen and layout computation to reason about
 /// how values should be represented in memory on the target platform.
-pub struct TyAndLayout<T> {
+pub struct TyAndLayout<'ctx, T> {
     /// The type this layout refers to.
     ///
     /// This is usually a TIR type, but can be any type that has a size and alignment.
     pub ty: T,
     /// The layout information for the type, including size and alignment.
-    pub layout: Layout,
+    pub layout: crate::Layout<'ctx>,
 }
 
-impl<T> std::ops::Deref for TyAndLayout<T> {
-    type Target = Layout;
+impl<'ctx, T> std::ops::Deref for TyAndLayout<'ctx, T> {
+    type Target = crate::Layout<'ctx>;
 
     fn deref(&self) -> &Self::Target {
         &self.layout
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Represents the layout of a type in the target architecture.
 ///
 /// This struct contains the size, alignment, and backend representation
@@ -72,7 +73,7 @@ impl Layout {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Represents how values are passed to the backend during code generation.
 ///
 /// This is *not* the same as the platform's ABI.
@@ -115,7 +116,7 @@ impl BackendRepr {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Represents primitive types that can be used in the backend representation.
 pub enum Primitive {
     /// A signed integer type.

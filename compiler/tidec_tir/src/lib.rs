@@ -1,15 +1,16 @@
-use std::ops::Deref;
-
-use crate::ctx::{Interned, TirCtx, Ty};
-
-pub mod ctx;
 pub mod layout_ctx;
+pub mod ctx;
 pub mod syntax;
 pub mod body;
 pub mod ty;
 
+use std::ops::Deref;
+use tidec_utils::interner::{Interned, Ty};
+use crate::ctx::TirCtx;
 
-pub struct TirTy<'ctx>(Interned<'ctx, crate::ty::TirTy<ctx::TirCtx<'ctx>>>);
+
+pub struct TirTy<'ctx>(Interned<'ctx, crate::ty::TirTy<TirCtx<'ctx>>>);
+
 
 impl<'ctx> Ty<TirCtx<'ctx>> for TirTy<'ctx> {}
 

@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 /// Specifies both the ABI-required and preferred alignment for a type, in bytes.
 ///
 /// Both `abi` and `pref` are powers of two. The ABI alignment (`abi`) is the minimum
@@ -29,7 +29,7 @@ impl AbiAndPrefAlign {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Size of a type in bytes.
 pub struct Size(u64);
 
@@ -65,7 +65,7 @@ impl Size {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// Alignment of a type in bytes (always a power of two).
 pub struct Align(u64);
 
