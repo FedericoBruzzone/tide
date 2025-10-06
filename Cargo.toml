@@ -6,6 +6,7 @@ members = [
     "compiler/tidec_abi",
     "compiler/tidec_codegen_llvm", 
     "compiler/tidec_codegen_ssa",
+    "compiler/tidec_intern",
     "compiler/tidec_log",
     "compiler/tidec_tir",
     "compiler/tidec_utils",
