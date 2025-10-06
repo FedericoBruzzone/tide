@@ -1,24 +1,25 @@
 use crate::{ctx::TirCtx, ty, TirTy};
 use tidec_abi::{
-    layout::{BackendRepr, Layout, Primitive, TyAndLayout},
+    layout::{self, BackendRepr, Primitive, TyAndLayout},
     size_and_align::{AbiAndPrefAlign, Size},
-    target::AddressSpace,
+    target::AddressSpace, 
 };
+use tidec_utils::interner::Interner;
 
 pub struct LayoutCtx<'ctx> {
-    lir_ctx: &'ctx TirCtx<'ctx>,
+    tir_ctx: &'ctx TirCtx<'ctx>,
 }
 
 impl<'ctx> LayoutCtx<'ctx> {
     // It accepts the `TirCtx` because it contains the `TargetDataLayout`.
-    pub fn new(lir_ctx: &'ctx TirCtx<'ctx>) -> Self {
-        LayoutCtx { lir_ctx }
+    pub fn new(tir_ctx: &'ctx TirCtx<'ctx>) -> Self {
+        LayoutCtx { tir_ctx }
     }
 
     /// Computes the layout for a given type. We should cache the results
     /// to avoid recomputing the layout for the same type multiple times.
     pub fn compute_layout(&self, ty: TirTy<'ctx>) -> TyAndLayout<TirTy<'ctx>> {
-        let data_layout = &self.lir_ctx.target().data_layout;
+        let data_layout = &self.tir_ctx.target().data_layout;
 
         let scalar = |primitive: Primitive| -> (Size, AbiAndPrefAlign, BackendRepr) {
             let (size, align) = match primitive {
@@ -81,13 +82,16 @@ impl<'ctx> LayoutCtx<'ctx> {
             ty::TirTy::Metadata => unimplemented!("Layout computation for TirTy::Metadata (used for unsized types/trait objects) is not yet supported. See TODO comment for details."),
         };
 
+        let layout = self.tir_ctx.intern_layout(layout::Layout {
+            size,
+            align,
+            backend_repr,
+        });
+
+
         TyAndLayout {
             ty,
-            layout: Layout {
-                size,
-                align,
-                backend_repr,
-            },
+            layout,
         }
     }
 }

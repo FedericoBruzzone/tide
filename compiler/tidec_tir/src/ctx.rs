@@ -1,10 +1,12 @@
+use std::{collections::HashSet};
+
 use tidec_abi::{
-    layout::TyAndLayout,
+    layout::{self, TyAndLayout},
     target::{BackendKind, TirTarget},
 };
 use tidec_utils::interner::Interner;
 
-use crate::{layout_ctx::LayoutCtx, TirTy};
+use crate::{layout_ctx::LayoutCtx, ty, TirTy};
 
 #[derive(Debug, Clone, Copy)]
 pub enum EmitKind {
@@ -19,9 +21,33 @@ pub struct TirArgs {
 }
 
 #[derive(Debug, Clone, Copy)]
+/// A pointer to a value allocated in an arena.
+pub struct ArenaPrt<'ctx, T: Sized>(&'ctx T);
+
+#[derive(Debug, Clone)]
+/// An arena for allocating TIR values.
+pub struct TirArena<'ctx> {
+    types: Vec<Box<ty::TirTy<TirCtx<'ctx>>>>,
+}
+
+#[derive(Debug, Clone)]
+/// The context for all interned entities in TIR.
+/// 
+/// It contains an arena for interning all TIR types and layouts, as well as
+/// other cacheable information.
+pub struct InternCtx<'ctx> {
+    /// The arena for allocating TIR types, layouts, and other interned entities.
+    arena: &'ctx TirArena<'ctx>,
+    /// A set of all interned TIR types.
+    types: HashSet<ArenaPrt<'ctx, ty::TirTy<TirCtx<'ctx>>>>,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct TirCtx<'ctx> {
     target: &'ctx TirTarget,
     arguments: &'ctx TirArgs,
+
+    intern_ctx: &'ctx InternCtx<'ctx>,
     // TODO(bruzzone): here we should have, other then an arena, also a HashMap from DefId
     // to the body of the function.
 }
@@ -47,9 +73,14 @@ impl<'ctx> TirCtx<'ctx> {
 
 impl<'ctx> Interner for TirCtx<'ctx> {
     type Ty = TirTy<'ctx>;
+    type Layout = layout::Layout;
+
+    fn intern_layout(&self, ty: Self::Layout) -> Self::Layout {
+        todo!()
+    }
 
     fn intern_ty(&self, ty: Self::Ty) -> Self::Ty {
         // TODO(bruzzone): implement proper interning
-        ty
+        todo!()
     }
 }

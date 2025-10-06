@@ -5,11 +5,14 @@ use std::ops::Deref;
 use std::ptr;
 
 pub trait Ty<I: Interner<Ty = Self>>: Sized + Clone + Copy + Debug + Eq + PartialEq + Hash {}
+pub trait Layout<I: Interner<Layout = Self>>: Sized + Clone + Copy + Debug + Eq + PartialEq + Hash {}
 
 pub trait Interner: Sized + Clone + Copy {
     type Ty: Ty<Self>;
+    type Layout: Layout<Self>;
 
-    fn intern_ty(&self, ty: Self::Ty) -> Self::Ty;
+    fn intern_ty(&self, ty: ty::Ty) -> Self::Ty;
+    fn intern_layout(&self, ty: layout::Layout) -> Self::Layout;
 }
 
 /// A reference to a value that is interned, and is known to be unique.
