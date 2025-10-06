@@ -285,7 +285,7 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
     fn const_scalar_to_backend_value(
         &self,
         const_scalar: ConstScalar,
-        ty_layout: TyAndLayout<TirTy>,
+        ty_layout: TyAndLayout<TirTy<'ctx>>,
     ) -> Self::Value {
         assert!(matches!(ty_layout.backend_repr, BackendRepr::Scalar(_)));
         let llty = ty_layout.ty.into_basic_type(self.ctx);

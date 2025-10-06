@@ -8,7 +8,7 @@ use tidec_tir::syntax::{
     ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue, RawScalarValue,
     Statement, Terminator, TirTy, UnaryOp, RETURN_LOCAL,
 };
-use tidec_tir::tir::{
+use tidec_tir::body::{
     CallConv, DefId, EmitKind, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirCtx, TirItemKind,
     TirUnit, TirUnitMetadata, UnnamedAddress, Visibility,
 };
@@ -20,8 +20,15 @@ fn main() {
     init_tidec_logger();
     debug!("Logging initialized");
 
+
+    let target = TirTarget::new(BackendKind::Llvm);
+    let arguments = TirArgs { emit_kind: EmitKind::LlvmIr };
+
     // TODO: check valitiy of TideArgs
-    let lir_ctx = TirCtx::new(BackendKind::Llvm, EmitKind::LlvmIr);
+    let lir_ctx = TirCtx {
+        target: &target,
+        arguments: &arguments,
+    };
 
     // Create a simple main function that returns 0.
     // ```c

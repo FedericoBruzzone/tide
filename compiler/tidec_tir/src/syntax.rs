@@ -1,45 +1,7 @@
 use std::num::NonZero;
-
 use tidec_abi::size_and_align::Size;
 use tidec_utils::idx::Idx;
-
-use crate::tir::TirCtx;
-
-#[derive(Debug, Copy, Clone)]
-pub enum TirTy {
-    I8,
-    I16,
-    I32,
-    I64,
-    I128,
-
-    U8,
-    U16,
-    U32,
-    U64,
-    U128,
-
-    F16,
-    F32,
-    F64,
-    F128,
-
-    // https://llvm.org/docs/TypeMetadata.html
-    Metadata,
-}
-
-impl TirTy {
-    pub fn is_floating_point(&self) -> bool {
-        matches!(self, TirTy::F16 | TirTy::F32 | TirTy::F64 | TirTy::F128)
-    }
-
-    pub fn is_signed_integer(&self) -> bool {
-        matches!(
-            self,
-            TirTy::I8 | TirTy::I16 | TirTy::I32 | TirTy::I64 | TirTy::I128
-        )
-    }
-}
+use crate::{ctx::TirCtx, TirTy};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 /// A `Local` variable in the TIR.
@@ -69,7 +31,7 @@ impl From<Local> for Place {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Represents a memory location (or "place") within TIR that can be used
 /// as the target of assignments or the source of loads.
 ///
@@ -113,7 +75,7 @@ impl Place {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Represents a single step in a `Place` projection path.
 ///
 /// A `Projection` allows navigation into more complex data structures
@@ -131,11 +93,8 @@ pub enum Projection {
     Todo,
 }
 
-#[derive(Eq, PartialEq)]
-/// A body identifier in the TIR. A body can be a function, a closure, etc.
-pub struct Body(usize);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Represents a right-hand side (RValue) in TIR during code generation.
 ///
 /// An `RValue` is something that can be **evaluated to produce a value**.  
@@ -149,26 +108,26 @@ pub struct Body(usize);
 /// let z = 42;        // `42` is an operand
 /// let s = "hi";      // `"hi"` is an operand (a fat pointer and length)
 /// ```
-pub enum RValue {
+pub enum RValue<'ctx> {
     /// An operand value.
-    Operand(Operand),
+    Operand(Operand<'ctx>),
     /// A unary operation applied to an operand. The operand's type is preserved.
     ///
     /// For example, negation (`-x`), logical not (`!x`), or bitwise not (`~x`).
-    UnaryOp(UnaryOp, Operand),
+    UnaryOp(UnaryOp, Operand<'ctx>),
     /// A binary operation applied to two operands. The result type is the same as the operands' type.
     ///
     /// For example, addition (`x + y`), subtraction (`x - y`), multiplication (`x * y`), etc.
-    BinaryOp(BinaryOp, Operand, Operand),
+    BinaryOp(BinaryOp, Operand<'ctx>, Operand<'ctx>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnaryOp {
     /// Arithmetic negation.
     Neg,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     /// Addition.
     Add,
@@ -194,7 +153,7 @@ pub enum BinaryOp {
 
 impl BinaryOp {
     /// Returns the resulting type of the binary operation, which is the same as the operand types.
-    pub fn ty(&self, tir_ctx: &TirCtx, lhs_ty: TirTy, rhs_ty: TirTy) -> TirTy {
+    pub fn ty<'ctx>(&self, tir_ctx: &TirCtx<'ctx>, lhs_ty: TirTy<'ctx>, rhs_ty: TirTy<'ctx>) -> TirTy<'ctx> {
         let _ = tir_ctx;
         let _ = rhs_ty;
         match self {
@@ -209,9 +168,11 @@ impl BinaryOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+/// An operand in TIR.
+/// Semantically, an operand is a value that can be used in expressions.
 // TODO(bruzzone): consider to switch to `copy` and `move` semantic, instead of `use`
-pub enum Operand {
+pub enum Operand<'ctx> {
     /// A place value.
     ///
     /// This represents a value located at a specific memory location.
@@ -227,20 +188,20 @@ pub enum Operand {
     ///
     /// TODO: Consider separating this into a dedicated `Operand` enum with variants like
     /// `Const`, `Copy`, and `Move` for clarity and future extensibility.
-    Const(ConstOperand),
+    Const(ConstOperand<'ctx>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 /// Semantically, a constant is already a value; it cannot change.
 // TODO(bruzzone): Add more variants for different constant types.
-pub enum ConstOperand {
+pub enum ConstOperand<'ctx> {
     /// A constant value that can be used in the TIR.
-    Value(ConstValue, TirTy),
+    Value(ConstValue, TirTy<'ctx>),
 }
 
-impl ConstOperand {
+impl<'ctx> ConstOperand<'ctx> {
     /// Returns the type of the constant operand.
-    pub fn ty(&self) -> TirTy {
+    pub fn ty(&self) -> TirTy<'ctx> {
         match self {
             ConstOperand::Value(_, ty) => *ty,
         }
@@ -442,41 +403,69 @@ impl RawScalarValue {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct LocalData {
-    pub ty: TirTy,
+#[derive(Debug, Clone)]
+pub struct LocalData<'ctx> {
+    pub ty: TirTy<'ctx>,
     pub mutable: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// A statement in a basic block.
 ///
 /// A statement is an operation that does not transfer control to another block (i.e., it is not a
 /// terminator of a basic block). It is a part of the block's execution.
-pub enum Statement {
+pub enum Statement<'ctx> {
     // An assignment statement. We use a Box to keep the size small.
-    Assign(Box<(Place, RValue)>),
+    Assign(Box<(Place, RValue<'ctx>)>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// The terminator of a basic block.
 ///
 /// The terminator of a basic block is the last statement of the block.
 /// It is an operation that ends the block and transfers control to another block.
-pub enum Terminator {
+pub enum Terminator<'ctx> {
     /// Returns from the function.
     ///
     /// The semantics of return is, at least, assign the value in the current
     /// return place (`Local(0)`) to the place specified, via a `Call` terminator
     /// by the caller.
     Return,
+    /// A function call.
+    ///
+    /// This terminator represents a function call, which transfers control to the
+    /// called function and, upon return, continues execution at a specified basic block.
+    Call {
+        /// The function to call.
+        func: Operand<'ctx>,
+        /// The arguments to the function.
+        args: Vec<Operand<'ctx>>,
+        /// The destination for the return value.
+        destination: Place,
+        /// The basic block to continue execution at after the call.
+        target: BasicBlock,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct BasicBlock(usize);
+pub const ENTRY_BLOCK: BasicBlock = BasicBlock(0);
+
+#[derive(Debug, Clone)]
+/// The data of a basic block.
+///
+/// A basic block is a sequence of statements that ends with a terminator.
+/// The terminator is the last statement of the block and transfers control to another block.
+pub struct BasicBlockData<'ctx> {
+    pub statements: Vec<Statement<'ctx>>,
+    pub terminator: Terminator<'ctx>,
 }
 
 ////////// Trait implementations  //////////
 
-impl Idx for Local {
+impl Idx for BasicBlock {
     fn new(idx: usize) -> Self {
-        Local(idx)
+        BasicBlock(idx)
     }
 
     fn idx(&self) -> usize {
@@ -492,9 +481,11 @@ impl Idx for Local {
     }
 }
 
-impl Idx for Body {
+////////// Trait implementations  //////////
+
+impl Idx for Local {
     fn new(idx: usize) -> Self {
-        Body(idx)
+        Local(idx)
     }
 
     fn idx(&self) -> usize {
