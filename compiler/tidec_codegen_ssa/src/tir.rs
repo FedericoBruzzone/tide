@@ -228,8 +228,8 @@ pub enum LocalRef<'ctx, V: std::fmt::Debug> {
 // ) { ... }
 // ```
 // function in rustc_codegen_ssa/src/mir/mod.rs
-pub fn codegen_tir_body<'be, 'ctx, B: BuilderMethods<'be, 'ctx>>(
-    ctx: &'be B::CodegenCtx,
+pub fn codegen_tir_body<'a, 'ctx: 'a, B: BuilderMethods<'a, 'ctx>>(
+    ctx: &'a B::CodegenCtx,
     lir_body: TirBody<'ctx>,
 ) {
     let fn_value = ctx.get_or_define_fn(&lir_body.metadata, &lir_body.ret_and_args);
@@ -248,7 +248,7 @@ pub fn codegen_tir_body<'be, 'ctx, B: BuilderMethods<'be, 'ctx>>(
         })
         .collect();
 
-    let mut fn_ctx = FnCtx::<'be, 'ctx, B> {
+    let mut fn_ctx = FnCtx::<'a, 'ctx, B> {
         lir_body,
         fn_value,
         ctx,

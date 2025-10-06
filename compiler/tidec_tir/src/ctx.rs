@@ -40,7 +40,6 @@ pub struct InternCtx<'ctx> {
     /// A set of all interned TIR types.
     types: HashSet<ArenaPrt<'ctx, ty::TirTy<TirCtx<'ctx>>>>,
 }
-
 #[derive(Debug, Clone, Copy)]
 pub struct TirCtx<'ctx> {
     target: &'ctx TirTarget,

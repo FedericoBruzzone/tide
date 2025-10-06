@@ -117,7 +117,7 @@ pub trait CodegenMethods<'ctx>:
 
 /// The builder methods for the codegen backend.
 /// This trait is used to define the methods used in the codegen backend.
-pub trait BuilderMethods<'be, 'ctx>: Sized + CodegenBackendTypes {
+pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
     /// The associated codegen context type.
     /// This ensures that the codegen context is compatible with the codegen backend types.
     type CodegenCtx: CodegenMethods<
@@ -140,13 +140,13 @@ pub trait BuilderMethods<'be, 'ctx>: Sized + CodegenBackendTypes {
 
     /// Create a new builder for the given codegen context and basic block.
     /// The builder is positioned at the end of the basic block.
-    fn build(ctx: &'be Self::CodegenCtx, bb: Self::BasicBlock) -> Self;
+    fn build(ctx: &'a Self::CodegenCtx, bb: Self::BasicBlock) -> Self;
 
     /// Append a new basic block to the given function value with the given name.
     /// The name can be empty, in which case a unique name will be generated.
     /// The function value is assumed to be valid and belong to the same context as the codegen context.
     fn append_basic_block(
-        ctx: &'be Self::CodegenCtx,
+        ctx: &'a Self::CodegenCtx,
         fn_value: Self::FunctionValue,
         name: &str,
     ) -> Self::BasicBlock;

@@ -113,7 +113,7 @@ impl<'ll, 'ctx> DefineCodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
     /// For LLVM, we are able to reuse the generic implementation of `define_lir_body`
     /// provided in the `lir` module, as it is generic over the `BuilderMethods` trait.
     fn define_body(&self, lir_body: TirBody<'ctx>) {
-        tir::codegen_tir_body::<'ll, 'ctx, crate::builder::CodegenBuilder<'_, 'll, 'ctx>>(self, lir_body);
+        tir::codegen_tir_body::<crate::builder::CodegenBuilder<'_, 'll, 'ctx>>(self, lir_body);
     }
 }
 
@@ -222,7 +222,7 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
 
     #[instrument(skip(self, lir_unit))]
     // TODO: Move as a method of `CodegenCtx`?
-    fn compile_tir_unit<B: BuilderMethods<'ll, 'ctx>>(&self, lir_unit: TirUnit<'ctx>) {
+    fn compile_tir_unit<'a, B: BuilderMethods<'a, 'ctx>>(&self, lir_unit: TirUnit<'ctx>) {
         // Predefine the functions. That is, create the function declarations.
         for lir_body in &lir_unit.bodies {
             self.predefine_body(&lir_body.metadata, &lir_body.ret_and_args);
@@ -312,7 +312,7 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
     fn get_or_define_fn(
         &self,
         lir_body_metadata: &TirBodyMetadata,
-        lir_body_ret_and_args: &IdxVec<Local, LocalData>,
+        lir_body_ret_and_args: &IdxVec<Local, LocalData<'ctx>>,
     ) -> FunctionValue<'ll> {
         let name = lir_body_metadata.name.as_str();
 
