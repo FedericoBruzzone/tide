@@ -8,8 +8,6 @@ pub trait Ty<I: Interner<Ty = Self>>: Sized + Clone + Copy + Debug + Eq + Partia
 
 pub trait Interner: Sized + Clone + Copy {
     type Ty: Ty<Self>;
-
-    fn intern_ty<T>(&self, ty: T) -> Self::Ty;
 }
 
 /// A reference to a value that is interned, and is known to be unique.

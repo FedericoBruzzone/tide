@@ -1,11 +1,18 @@
-use std::{collections::HashSet};
+use std::{
+    borrow::Borrow,
+    cell::{Cell, RefCell},
+    collections::HashSet,
+    hash::Hash,
+    ptr::NonNull,
+};
 
+use crate::{layout_ctx::LayoutCtx, ty, TirTy};
 use tidec_abi::{
     layout::{self, TyAndLayout},
-    target::{BackendKind, TirTarget}, Layout,
+    target::{BackendKind, TirTarget},
+    Layout,
 };
-use tidec_utils::interner::Interner;
-use crate::{layout_ctx::LayoutCtx, ty, TirTy};
+use tidec_utils::interner::{Interned, Interner};
 
 #[derive(Debug, Clone, Copy)]
 pub enum EmitKind {
@@ -19,41 +26,149 @@ pub struct TirArgs {
     pub emit_kind: EmitKind,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// A pointer to a value allocated in an arena.
+///
+/// This is a thin wrapper around a reference to a value allocated in an arena.
+/// It is used to indicate that the value is allocated in an arena, and should
+/// not be deallocated manually.
 pub struct ArenaPrt<'ctx, T: Sized>(&'ctx T);
+
+#[derive(Debug, Clone)]
+/// A chunk of memory allocated in the arena.
+///
+/// This is used to store multiple values in a single allocation, to reduce
+/// the overhead of multiple allocations. Each chunk is a contiguous block of
+/// memory that can hold multiple values of type `T`.
+pub struct ArenaChunk<T = u8> {
+    mem: NonNull<[T]>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArenaDropless {
+    /// A pointer to the first free byte in the current chunk.
+    start: Cell<*mut u8>,
+
+    /// A pointer to the end of the free space in the current chunk.
+    end: Cell<*mut u8>,
+
+    /// The chunks of memory allocated in the arena.
+    mem: RefCell<Vec<ArenaChunk>>,
+}
+
+impl ArenaDropless {
+    /// Allocates a new value in the arena, returning a pointer to it.
+    ///
+    /// This function is safe to call, as long as the value is `Sized`.
+    /// The caller must ensure that the value is not dropped manually,
+    /// as it will be dropped when the arena is dropped.
+    pub fn alloc<T: Sized>(&self, value: T) -> &T {
+        let size = std::mem::size_of::<T>();
+        let align = std::mem::align_of::<T>();
+
+        // Ensure we have enough space in the current chunk.
+        if unsafe { self.start.get().add(size) } > self.end.get() {
+            // Not enough space, allocate a new chunk.
+            let chunk_size = std::cmp::max(1024, size + align);
+            let layout = std::alloc::Layout::from_size_align(chunk_size, align).unwrap();
+            let ptr = unsafe { std::alloc::alloc(layout) };
+            if ptr.is_null() {
+                std::alloc::handle_alloc_error(layout);
+            }
+            let chunk = ArenaChunk {
+                mem: NonNull::slice_from_raw_parts(NonNull::new(ptr).unwrap(), chunk_size),
+            };
+            self.mem.borrow_mut().push(chunk);
+            self.start.set(ptr);
+            self.end.set(unsafe { ptr.add(chunk_size) });
+        }
+
+        // Allocate the value in the current chunk.
+        let ptr = self.start.get() as *mut T;
+        unsafe {
+            ptr.write(value);
+        }
+        self.start.set(unsafe { self.start.get().add(size) });
+
+        unsafe { &*ptr }
+    }
+}
 
 #[derive(Debug, Clone)]
 /// An arena for allocating TIR values.
 pub struct TirArena<'ctx> {
-    types: Vec<Box<ty::TirTy<TirCtx<'ctx>>>>,
+    // types: Vec<Box<ty::TirTy<TirCtx<'ctx>>>>,
+    /// We use a dropless arena because TIR types do not need to be dropped.
+    /// This avoids the overhead of running destructors when the arena is dropped.
+    /// Additionally, since TIR types are immutable after creation, we do not need
+    /// to worry about memory leaks.
+    inner: ArenaDropless,
+
+    /// The lifetime marker for the arena.
+    /// This ensures that the arena lives as long as the context that uses it.
+    _marker: std::marker::PhantomData<&'ctx ()>,
 }
 
 impl<'ctx> Default for TirArena<'ctx> {
     fn default() -> Self {
         Self {
-            types: Vec::new(),
+            inner: ArenaDropless {
+                start: Cell::new(std::ptr::null_mut()),
+                end: Cell::new(std::ptr::null_mut()),
+                mem: RefCell::new(Vec::new()),
+            },
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+/// A set of interned values of type `T`.
+///
+/// We need to use a `RefCell` here because we want to mutate the set
+/// even when we have a shared reference to the `InternedSet`. That is,
+/// internal mutability is required.
+pub struct InternedSet<T: Sized + Eq + std::hash::Hash>(RefCell<HashSet<T>>);
+
+impl<T: Sized + Clone + Copy + Eq + std::hash::Hash> InternedSet<T> {
+    pub fn intern<R>(&self, value: R, intern_in_arena: impl FnOnce(R) -> T) -> T
+    where
+        T: Borrow<R>,
+        R: Hash + Eq,
+    {
+        let set = &self.0;
+        if let Some(existing) = set.borrow().get(value.borrow()) {
+            *existing
+        } else {
+            let new = intern_in_arena(value);
+            set.borrow_mut().insert(new);
+            new
         }
     }
 }
 
 #[derive(Debug, Clone)]
 /// The context for all interned entities in TIR.
-/// 
+///
 /// It contains an arena for interning all TIR types and layouts, as well as
 /// other cacheable information.
+///
+/// Note that InternedSets store arena pointers. This ensures that the
+/// interned values live as long as the arena, and are not deallocated
+/// prematurely. Additionally, to compare interned values, we only need to
+/// compare their pointers, which is efficient.
 pub struct InternCtx<'ctx> {
     /// The arena for allocating TIR types, layouts, and other interned entities.
     arena: &'ctx TirArena<'ctx>,
     /// A set of all interned TIR types.
-    types: HashSet<ArenaPrt<'ctx, ty::TirTy<TirCtx<'ctx>>>>,
+    types: InternedSet<ArenaPrt<'ctx, ty::TirTy<TirCtx<'ctx>>>>,
 }
 
 impl<'ctx> InternCtx<'ctx> {
     pub fn new(arena: &'ctx TirArena<'ctx>) -> Self {
         Self {
             arena,
-            types: HashSet::new(),
+            types: InternedSet(RefCell::new(HashSet::new())),
         }
     }
 }
@@ -64,7 +179,6 @@ pub struct TirCtx<'ctx> {
     arguments: &'ctx TirArgs,
 
     intern_ctx: &'ctx InternCtx<'ctx>,
-
     // TODO(bruzzone): here we should have, other then an arena, also a HashMap from DefId
     // to the body of the function.
 }
@@ -89,10 +203,7 @@ impl<'ctx> TirCtx<'ctx> {
     pub fn layout_of(self, ty: TirTy<'ctx>) -> TyAndLayout<'ctx, TirTy<'ctx>> {
         let layout_ctx = LayoutCtx::new(self);
         let layout = layout_ctx.compute_layout(ty);
-        TyAndLayout { 
-            ty,
-            layout,
-        }
+        TyAndLayout { ty, layout }
     }
 
     pub fn backend_kind(&self) -> &BackendKind {
@@ -107,12 +218,14 @@ impl<'ctx> TirCtx<'ctx> {
     pub fn intern_layout(&self, _layout: layout::Layout) -> Layout<'ctx> {
         todo!()
     }
+
+    pub fn intern_ty(&self, ty: ty::TirTy<TirCtx<'ctx>>) -> TirTy<'ctx> {
+        TirTy(Interned::new(self.intern_ctx.types.intern(ty, |ty| {
+            ArenaPrt(self.intern_ctx.arena.inner.alloc(ty))
+        }).0))
+    }
 }
 
 impl<'ctx> Interner for TirCtx<'ctx> {
     type Ty = TirTy<'ctx>;
-    
-    fn intern_ty<T>(&self, _ty: T) -> Self::Ty {
-        todo!()
-    }
 }
