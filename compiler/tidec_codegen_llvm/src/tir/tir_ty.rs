@@ -12,7 +12,7 @@ pub trait BasicTypesUtils<'ctx, 'll> {
     fn into_basic_type(self, ctx: &CodegenCtx<'ctx, 'll>) -> BasicTypeEnum<'ll>;
 }
 
-impl<'ctx, 'll> BasicTypesUtils<'ll> for TirTy<'ctx> {
+impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
     fn into_basic_type_metadata(self, ctx: &CodegenCtx<'ctx, 'll>) -> BasicMetadataTypeEnum<'ll> {
         match &**self {
             ty::TirTy::I8 => BasicTypeEnum::IntType(ctx.ll_context.i8_type()).into(),

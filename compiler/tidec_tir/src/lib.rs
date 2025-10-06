@@ -10,8 +10,6 @@ use crate::ctx::TirCtx;
 
 
 pub struct TirTy<'ctx>(Interned<'ctx, crate::ty::TirTy<TirCtx<'ctx>>>);
-
-
 impl<'ctx> Ty<TirCtx<'ctx>> for TirTy<'ctx> {}
 
 impl<'ctx> std::fmt::Debug for TirTy<'ctx> {

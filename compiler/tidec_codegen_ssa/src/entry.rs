@@ -1,9 +1,9 @@
 use crate::{
     tir::{OperandVal, PlaceRef},
-    traits::{CodegenMethods, LayoutOf},
+    traits::{CodegenMethods, LayoutOf, FnAbiOf},
 };
 use tidec_abi::{
-    calling_convention::function::{FnAbi, PassMode},
+    calling_convention::function::PassMode,
     layout::TyAndLayout,
 };
 use tidec_tir::{
@@ -18,11 +18,6 @@ use crate::{
 };
 
 pub struct FnCtx<'be, 'ctx, B: BuilderMethods<'be, 'ctx>> {
-    /// The function ABI.
-    /// This contains information about the calling convention,
-    /// argument types, return type, etc.
-    pub fn_abi: FnAbi<TirTy<'ctx>>,
-
     /// The body of the function in TIR.
     pub lir_body: TirBody<'ctx>,
 
@@ -190,14 +185,11 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                     ),
                 };
 
-                OperandRef::new_immediate(
-                    operand_val,
-                    builder.ctx().layout_of(bin_op.ty(
-                        &builder.ctx().tir_ctx(),
-                        lhs_ref.ty_layout.ty,
-                        rhs_ref.ty_layout.ty,
-                    )),
-                )
+                let ctx = builder.ctx();
+                let tir_ctx = ctx.tir_ctx();
+                let result_ty = bin_op.ty(&tir_ctx, lhs_ref.ty_layout.ty, rhs_ref.ty_layout.ty);
+                let result_layout = ctx.layout_of(result_ty);
+                OperandRef::new_immediate(operand_val, result_layout)
             }
         }
     }
@@ -308,12 +300,12 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         builder: &mut B,
         func: &Operand<'ctx>,
         args: &[Operand<'ctx>],
-        destination: &Place,
-        target: BasicBlock,
+        _destination: &Place,
+        _target: BasicBlock,
     ) {
         // This is the callee function reference. `func` is either a function pointer or a direct function.
-        let func_ref = self.codegen_operand(builder, &func);
-        let arg_vals: Vec<B::Value> = args
+        let _func_ref = self.codegen_operand(builder, &func);
+        let _arg_vals: Vec<B::Value> = args
             .iter()
             .map(|arg| {
                 let arg_ref = self.codegen_operand(builder, arg);
@@ -365,7 +357,8 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
     /// This function generates the return instruction for the function.
     /// It handles different return modes based on the function ABI.
     fn codegen_return_terminator(&mut self, builder: &mut B) {
-        let be_val = match self.fn_abi.ret.mode {
+        let fn_abi = self.ctx.fn_abi_of(&self.lir_body.ret_and_args);
+        let be_val = match fn_abi.ret.mode {
             PassMode::Ignore | PassMode::Indirect => {
                 info!("Handling ignored or indirect return");
                 builder.build_return(None);

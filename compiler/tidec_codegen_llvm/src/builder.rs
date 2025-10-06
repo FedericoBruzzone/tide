@@ -6,7 +6,8 @@ use tidec_abi::layout::{BackendRepr, Primitive, TyAndLayout};
 use tidec_abi::size_and_align::{Align, Size};
 use tidec_codegen_ssa::tir::{OperandRef, PlaceRef};
 use tidec_codegen_ssa::traits::{BuilderMethods, CodegenBackendTypes};
-use tidec_tir::syntax::{ConstScalar, TirTy};
+use tidec_tir::syntax::ConstScalar;
+use tidec_tir::TirTy;
 use tracing::instrument;
 
 use crate::context::CodegenCtx;
@@ -55,39 +56,39 @@ macro_rules! impl_arithmetic_ops {
 ///
 /// This struct wraps the `inkwell::builder::Builder` and provides
 /// additional methods for code generation.
-pub struct CodegenBuilder<'a, 'll> {
+pub struct CodegenBuilder<'a, 'll, 'ctx> {
     pub ll_builder: Builder<'ll>,
-    ctx: &'a CodegenCtx<'ll>,
+    ctx: &'a CodegenCtx<'ctx, 'll>,
 }
 
-impl<'ll> Deref for CodegenBuilder<'_, 'll> {
-    type Target = CodegenCtx<'ll>;
+impl<'ll, 'ctx> Deref for CodegenBuilder<'_, 'll, 'ctx> {
+    type Target = CodegenCtx<'ctx, 'll>;
 
     fn deref(&self) -> &Self::Target {
         self.ctx
     }
 }
 
-impl<'ll> CodegenBackendTypes for CodegenBuilder<'_, 'll> {
-    type BasicBlock = <CodegenCtx<'ll> as CodegenBackendTypes>::BasicBlock;
-    type Type = <CodegenCtx<'ll> as CodegenBackendTypes>::Type;
-    type Value = <CodegenCtx<'ll> as CodegenBackendTypes>::Value;
-    type FunctionType = <CodegenCtx<'ll> as CodegenBackendTypes>::FunctionType;
-    type FunctionValue = <CodegenCtx<'ll> as CodegenBackendTypes>::FunctionValue;
-    type MetadataType = <CodegenCtx<'ll> as CodegenBackendTypes>::MetadataType;
-    type MetadataValue = <CodegenCtx<'ll> as CodegenBackendTypes>::MetadataValue;
+impl<'ll, 'ctx> CodegenBackendTypes for CodegenBuilder<'_, 'll, 'ctx> {
+    type BasicBlock = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::BasicBlock;
+    type Type = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::Type;
+    type Value = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::Value;
+    type FunctionType = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::FunctionType;
+    type FunctionValue = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::FunctionValue;
+    type MetadataType = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::MetadataType;
+    type MetadataValue = <CodegenCtx<'ll, 'ctx> as CodegenBackendTypes>::MetadataValue;
 }
 
-impl<'a, 'll> CodegenBuilder<'a, 'll> {
+impl<'a, 'll, 'ctx> CodegenBuilder<'a, 'll, 'ctx> {
     #[instrument(skip(ctx))]
-    pub fn with_ctx(ctx: &'a CodegenCtx<'ll>) -> Self {
+    pub fn with_ctx(ctx: &'a CodegenCtx<'ll, 'ctx>) -> Self {
         let ll_builder = ctx.ll_context.create_builder();
         CodegenBuilder { ll_builder, ctx }
     }
 }
 
-impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
-    type CodegenCtx = CodegenCtx<'ll>;
+impl<'a, 'll, 'ctx> BuilderMethods<'ll, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
+    type CodegenCtx = CodegenCtx<'ctx, 'll>;
 
     fn ctx(&self) -> &Self::CodegenCtx {
         self.ctx
@@ -96,7 +97,7 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
     #[instrument(skip(ctx, llbb))]
     /// Create a new CodeGenBuilder from a CodeGenCtx and a BasicBlock.
     /// The builder is positioned at the end of the BasicBlock.
-    fn build(ctx: &'a CodegenCtx<'ll>, llbb: BasicBlock) -> Self {
+    fn build(ctx: &'a CodegenCtx<'ctx, 'll>, llbb: BasicBlock) -> Self {
         let builder = CodegenBuilder::with_ctx(ctx);
         builder.ll_builder.position_at_end(llbb);
         builder
@@ -139,7 +140,7 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
     ///
     /// Panics if the function is not a valid function value.
     fn append_basic_block(
-        ctx: &'a CodegenCtx<'ll>,
+        ctx: &'a CodegenCtx<'ctx, 'll>,
         fn_value: FunctionValue<'ll>,
         name: &str,
     ) -> BasicBlock<'ll> {
@@ -147,7 +148,7 @@ impl<'a, 'll> BuilderMethods<'a, 'll> for CodegenBuilder<'a, 'll> {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn load_operand(&mut self, place_ref: &PlaceRef<Self::Value>) -> OperandRef<Self::Value> {
+    fn load_operand(&mut self, place_ref: &PlaceRef<'ctx, Self::Value>) -> OperandRef<'ctx, Self::Value> {
         if place_ref.ty_layout.is_zst() {
             return OperandRef::new_zst(place_ref.ty_layout);
         }

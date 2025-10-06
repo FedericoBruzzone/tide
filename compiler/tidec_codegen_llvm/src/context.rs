@@ -16,7 +16,7 @@ use inkwell::OptimizationLevel;
 use tidec_abi::calling_convention::function::{ArgAbi, FnAbi, PassMode};
 use tidec_abi::layout::{BackendRepr, TyAndLayout};
 use tidec_codegen_ssa::tir;
-use tidec_tir::ctx::TirCtx;
+use tidec_tir::ctx::{EmitKind, TirCtx};
 use tidec_tir::TirTy;
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
@@ -38,10 +38,8 @@ pub struct CodegenCtx<'ctx, 'll> {
     pub ll_context: &'ll Context,
     // FIXME: Make this private
     pub ll_module: Module<'ll>,
-
     /// The TIR type context.
     pub lir_ctx: TirCtx<'ctx>,
-
     /// A map from DefId to the LLVM value (usually a function value).
     //
     // FIXME: Consider removing RefCell and using &mut
@@ -51,7 +49,7 @@ pub struct CodegenCtx<'ctx, 'll> {
     pub instances: RefCell<HashMap<DefId, AnyValueEnum<'ll>>>,
 }
 
-impl<'ll> Deref for CodegenCtx<'_, 'll> {
+impl<'ll, 'ctx> Deref for CodegenCtx<'ctx, 'll> {
     type Target = Context;
 
     fn deref(&self) -> &Self::Target {
@@ -59,7 +57,7 @@ impl<'ll> Deref for CodegenCtx<'_, 'll> {
     }
 }
 
-impl<'ll> CodegenBackendTypes for CodegenCtx<'_, 'll> {
+impl<'ctx, 'll> CodegenBackendTypes for CodegenCtx<'ctx, 'll> {
     type BasicBlock = BasicBlock<'ll>;
     type FunctionType = FunctionType<'ll>;
     type FunctionValue = FunctionValue<'ll>;
@@ -111,29 +109,30 @@ impl<'ctx> PreDefineCodegenMethods<'ctx> for CodegenCtx<'ctx, '_> {
     }
 }
 
-impl<'ctx> DefineCodegenMethods<'ctx> for CodegenCtx<'ctx, '_> {
+impl<'ll, 'ctx> DefineCodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
     /// For LLVM, we are able to reuse the generic implementation of `define_lir_body`
     /// provided in the `lir` module, as it is generic over the `BuilderMethods` trait.
     fn define_body(&self, lir_body: TirBody<'ctx>) {
-        tir::codegen_tir_body::<'_, 'ctx, crate::builder::CodegenBuilder<'_, 'ctx>>(self, lir_body);
+        tir::codegen_tir_body::<'ll, 'ctx, crate::builder::CodegenBuilder<'_, 'll, 'ctx>>(self, lir_body);
     }
 }
 
-impl<'ctx> LayoutOf<'ctx> for CodegenCtx<'ctx, '_> {
-    fn layout_of(&self, lir_ty: TirTy<'ctx>) -> TyAndLayout<TirTy<'ctx>> {
+impl<'ctx, 'll> LayoutOf<'ctx> for CodegenCtx<'ctx, 'll> {
+    fn layout_of(&self, lir_ty: TirTy<'ctx>) -> TyAndLayout<'ctx, TirTy<'ctx>> {
         self.lir_ctx.layout_of(lir_ty)
     }
 }
 
-impl<'ctx> FnAbiOf<'ctx> for CodegenCtx<'ctx, '_> {
-    #[instrument(level = "debug", skip(self, lir_ty_ctx))]
+impl<'ctx, 'll> FnAbiOf<'ctx> for CodegenCtx<'ctx, 'll> {
+    #[instrument(level = "debug", skip(self))]
     fn fn_abi_of(
         &self,
-        lir_ty_ctx: TirCtx<'ctx>,
         lir_ret_and_args: &IdxVec<Local, LocalData<'ctx>>,
-    ) -> FnAbi<TirTy<'ctx>> {
+    ) -> FnAbi<'ctx, TirTy<'ctx>> {
+        let ty_ctx = self.lir_ctx;
+
         let argument_of = |ty: TirTy<'ctx>| -> ArgAbi<TirTy<'ctx>> {
-            let layout = lir_ty_ctx.layout_of(ty);
+            let layout = ty_ctx.layout_of(ty);
             let pass_mode = match layout.backend_repr {
                 BackendRepr::Scalar(_) => PassMode::Direct,
                 BackendRepr::Memory => PassMode::Indirect,
@@ -159,30 +158,8 @@ impl<'ctx> FnAbiOf<'ctx> for CodegenCtx<'ctx, '_> {
 }
 
 impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
-    fn declare_fn(
-        &self,
-        ret_ty: BasicTypeEnum<'ll>,
-        param_tys: &[BasicMetadataTypeEnum<'ll>],
-    ) -> FunctionType<'ll> {
-        let fn_ty = match ret_ty {
-            BasicTypeEnum::IntType(int_type) => int_type.fn_type(param_tys, false),
-            BasicTypeEnum::ArrayType(array_type) => array_type.fn_type(param_tys, false),
-            BasicTypeEnum::FloatType(float_type) => float_type.fn_type(param_tys, false),
-            BasicTypeEnum::PointerType(pointer_type) => pointer_type.fn_type(param_tys, false),
-            BasicTypeEnum::StructType(struct_type) => struct_type.fn_type(param_tys, false),
-            BasicTypeEnum::VectorType(vector_type) => vector_type.fn_type(param_tys, false),
-            BasicTypeEnum::ScalableVectorType(scalable_vector_type) => {
-                scalable_vector_type.fn_type(param_tys, false)
-            }
-        };
-
-        fn_ty
-    }
-}
-
-impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
     #[instrument(skip(lir_ctx, ll_context, ll_module))]
-    fn new(lir_ctx: TirCtx<'ctx>, ll_context: &'ll Context, ll_module: Module<'ll>) -> CodegenCtx<'ctx, 'll> {
+    pub fn new(lir_ctx: TirCtx<'ctx>, ll_context: &'ll Context, ll_module: Module<'ll>) -> CodegenCtx<'ctx, 'll> {
         let internal_target = lir_ctx.target();
         {
             let target_triple_string = internal_target.target_triple_string();
@@ -216,20 +193,43 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
         }
     }
 
+    fn declare_fn(
+        &self,
+        ret_ty: BasicTypeEnum<'ll>,
+        param_tys: &[BasicMetadataTypeEnum<'ll>],
+    ) -> FunctionType<'ll> {
+        let fn_ty = match ret_ty {
+            BasicTypeEnum::IntType(int_type) => int_type.fn_type(param_tys, false),
+            BasicTypeEnum::ArrayType(array_type) => array_type.fn_type(param_tys, false),
+            BasicTypeEnum::FloatType(float_type) => float_type.fn_type(param_tys, false),
+            BasicTypeEnum::PointerType(pointer_type) => pointer_type.fn_type(param_tys, false),
+            BasicTypeEnum::StructType(struct_type) => struct_type.fn_type(param_tys, false),
+            BasicTypeEnum::VectorType(vector_type) => vector_type.fn_type(param_tys, false),
+            BasicTypeEnum::ScalableVectorType(scalable_vector_type) => {
+                scalable_vector_type.fn_type(param_tys, false)
+            }
+        };
+
+        fn_ty
+    }
+}
+
+impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
+
     fn tir_ctx(&self) -> TirCtx<'ctx> {
         self.lir_ctx
     }
 
     #[instrument(skip(self, lir_unit))]
     // TODO: Move as a method of `CodegenCtx`?
-    fn compile_lir_unit<'ctx, B: BuilderMethods<'ll, 'ctx>>(&self, lir_unit: TirUnit<'ctx>) {
+    fn compile_tir_unit<B: BuilderMethods<'ll, 'ctx>>(&self, lir_unit: TirUnit<'ctx>) {
         // Predefine the functions. That is, create the function declarations.
         for lir_body in &lir_unit.bodies {
             self.predefine_body(&lir_body.metadata, &lir_body.ret_and_args);
         }
 
         // Now that all functions are pre-defined, we can compile the bodies.
-        for lir_body in &lir_unit.bodies {
+        for lir_body in lir_unit.bodies {
             // It corresponds to:
             // ```rust
             // for &(mono_item, item_data) in &mono_items {

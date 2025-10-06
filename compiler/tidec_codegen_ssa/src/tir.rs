@@ -1,4 +1,4 @@
-use crate::traits::{FnAbiOf, LayoutOf};
+use crate::traits::LayoutOf;
 use crate::{
     entry::FnCtx,
     traits::{BuilderMethods, CodegenMethods},
@@ -41,7 +41,7 @@ pub struct PlaceRef<'ctx, V: std::fmt::Debug> {
     /// Provides size, alignment, and ABI information, which is essential for
     /// correct code generation, especially for aggregates, unsized types,
     /// or types with nontrivial ABI requirements.
-    pub ty_layout: TyAndLayout<TirTy<'ctx>>,
+    pub ty_layout: TyAndLayout<'ctx, TirTy<'ctx>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -59,18 +59,18 @@ pub struct OperandRef<'ctx, V: std::fmt::Debug> {
     ///
     /// Provides size, alignment, and ABI information needed for correct
     /// code generation and backend handling.
-    pub ty_layout: TyAndLayout<TirTy<'ctx>>,
+    pub ty_layout: TyAndLayout<'ctx, TirTy<'ctx>>,
 }
 
 impl<'be, 'ctx, V: std::fmt::Debug> OperandRef<'ctx, V> {
-    pub fn new_zst(ty_layout: TyAndLayout<TirTy<'ctx>>) -> Self {
+    pub fn new_zst(ty_layout: TyAndLayout<'ctx, TirTy<'ctx>>) -> Self {
         OperandRef {
             operand_val: OperandVal::Zst,
             ty_layout,
         }
     }
 
-    pub fn new_immediate(value: V, ty_layout: TyAndLayout<TirTy<'ctx>>) -> Self {
+    pub fn new_immediate(value: V, ty_layout: TyAndLayout<'ctx, TirTy<'ctx>>) -> Self {
         OperandRef {
             operand_val: OperandVal::Immediate(value),
             ty_layout,
@@ -138,7 +138,7 @@ impl<T: std::fmt::Debug> OperandVal<T> {
 impl<'be, 'ctx, V: Copy + PartialEq + std::fmt::Debug> PlaceRef<'ctx, V> {
     pub fn alloca<B: BuilderMethods<'be, 'ctx, Value = V>>(
         builder: &mut B,
-        ty_and_layout: TyAndLayout<TirTy<'ctx>>,
+        ty_and_layout: TyAndLayout<'ctx, TirTy<'ctx>>,
     ) -> Self {
         assert!(!ty_and_layout.is_zst());
         PlaceVal::alloca(
@@ -170,8 +170,8 @@ pub struct PlaceVal<V: std::fmt::Debug> {
     pub align: Align,
 }
 
-impl<'a, 'be, V: Copy + PartialEq + std::fmt::Debug> PlaceVal<V> {
-    pub fn alloca<B: BuilderMethods<'a, 'be, Value = V>>(
+impl<'be, 'ctx, V: Copy + PartialEq + std::fmt::Debug> PlaceVal<V> {
+    pub fn alloca<B: BuilderMethods<'be, 'ctx, Value = V>>(
         builder: &mut B,
         size: Size,
         align: Align,
@@ -180,7 +180,7 @@ impl<'a, 'be, V: Copy + PartialEq + std::fmt::Debug> PlaceVal<V> {
         PlaceVal { value, align }
     }
 
-    pub fn with_layout(self, layout: TyAndLayout<TirTy>) -> PlaceRef<V> {
+    pub fn with_layout(self, layout: TyAndLayout<'ctx, TirTy<'ctx>>) -> PlaceRef<'ctx, V> {
         // TODO: Assert that the type is not unsized (through `TyAndLayout`).
         PlaceRef {
             place_val: self,
@@ -232,7 +232,6 @@ pub fn codegen_tir_body<'be, 'ctx, B: BuilderMethods<'be, 'ctx>>(
     ctx: &'be B::CodegenCtx,
     lir_body: TirBody<'ctx>,
 ) {
-    let fn_abi = ctx.fn_abi_of(ctx.tir_ctx(), &lir_body.ret_and_args);
     let fn_value = ctx.get_or_define_fn(&lir_body.metadata, &lir_body.ret_and_args);
     let entry_bb = B::append_basic_block(ctx, fn_value, "entry");
     let mut start_builder = B::build(ctx, entry_bb);
@@ -250,7 +249,6 @@ pub fn codegen_tir_body<'be, 'ctx, B: BuilderMethods<'be, 'ctx>>(
         .collect();
 
     let mut fn_ctx = FnCtx::<'be, 'ctx, B> {
-        fn_abi,
         lir_body,
         fn_value,
         ctx,

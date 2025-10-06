@@ -2,17 +2,16 @@ use std::{collections::HashSet};
 
 use tidec_abi::{
     layout::{self, TyAndLayout},
-    target::{BackendKind, TirTarget},
+    target::{BackendKind, TirTarget}, Layout,
 };
 use tidec_utils::interner::Interner;
-
 use crate::{layout_ctx::LayoutCtx, ty, TirTy};
 
 #[derive(Debug, Clone, Copy)]
 pub enum EmitKind {
     Assembly,
     Object,
-    Ir,
+    LlvmIr,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -48,6 +47,7 @@ pub struct TirCtx<'ctx> {
     arguments: &'ctx TirArgs,
 
     intern_ctx: &'ctx InternCtx<'ctx>,
+
     // TODO(bruzzone): here we should have, other then an arena, also a HashMap from DefId
     // to the body of the function.
 }
@@ -57,9 +57,13 @@ impl<'ctx> TirCtx<'ctx> {
         &self.target
     }
 
-    pub fn layout_of(&self, ty: TirTy<'ctx>) -> TyAndLayout<TirTy<'ctx>> {
+    pub fn layout_of(self, ty: TirTy<'ctx>) -> TyAndLayout<'ctx, TirTy<'ctx>> {
         let layout_ctx = LayoutCtx::new(self);
-        layout_ctx.compute_layout(ty)
+        let layout = layout_ctx.compute_layout(ty);
+        TyAndLayout { 
+            ty,
+            layout,
+        }
     }
 
     pub fn backend_kind(&self) -> &BackendKind {
@@ -69,18 +73,17 @@ impl<'ctx> TirCtx<'ctx> {
     pub fn emit_kind(&self) -> &EmitKind {
         &self.arguments.emit_kind
     }
+
+    // ===== Direct inter =====
+    pub fn intern_layout(&self, _layout: layout::Layout) -> Layout<'ctx> {
+        todo!()
+    }
 }
 
 impl<'ctx> Interner for TirCtx<'ctx> {
     type Ty = TirTy<'ctx>;
-    type Layout = layout::Layout;
-
-    fn intern_layout(&self, ty: Self::Layout) -> Self::Layout {
-        todo!()
-    }
-
-    fn intern_ty(&self, ty: Self::Ty) -> Self::Ty {
-        // TODO(bruzzone): implement proper interning
+    
+    fn intern_ty<T>(&self, _ty: T) -> Self::Ty {
         todo!()
     }
 }

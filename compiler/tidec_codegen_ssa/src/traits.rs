@@ -17,16 +17,15 @@ use crate::tir::{OperandRef, PlaceRef};
 /// It is used to get the layout of a type in the codegen backend.
 pub trait LayoutOf<'ctx> {
     /// Returns the layout of the given type.
-    fn layout_of(&self, ty: TirTy<'ctx>) -> TyAndLayout<TirTy<'ctx>>;
+    fn layout_of(&self, ty: TirTy<'ctx>) -> TyAndLayout<'ctx, TirTy<'ctx>>;
 }
 
 pub trait FnAbiOf<'ctx> {
     /// Returns the function ABI for the given return type and argument types.
     fn fn_abi_of(
         &self,
-        lit_ty_ctx: TirCtx<'ctx>,
         ret_and_args: &IdxVec<Local, LocalData<'ctx>>,
-    ) -> FnAbi<TirTy<'ctx>>;
+    ) -> FnAbi<'ctx, TirTy<'ctx>>;
 }
 
 /// This trait is used to define the types used in the codegen backend.
@@ -92,13 +91,13 @@ pub trait CodegenMethods<'ctx>:
     + DefineCodegenMethods<'ctx>
 {
     /// Creates a new codegen context for the given TIR type context and module.
-    fn new(lir_ty_ctx: TirCtx<'ctx>, context: &'ctx Self::Context, module: Self::Module) -> Self;
+    // fn new(lir_ty_ctx: TirCtx<'ctx>, context: &'ctx Self::Context, module: Self::Module) -> Self;
 
     /// Return the TIR type context associated with this codegen context.
     fn tir_ctx(&self) -> TirCtx<'ctx>;
 
     /// Compile the given TIR unit.
-    fn compile_lir_unit<'be, B: BuilderMethods<'be, 'ctx>>(&self, lir_unit: TirUnit<'ctx>);
+    fn compile_tir_unit<'be, B: BuilderMethods<'be, 'ctx>>(&self, lir_unit: TirUnit<'ctx>);
 
     /// Emit the output of the codegen backend.
     /// This could be writing to a file ASM, object file, or JIT execution.
