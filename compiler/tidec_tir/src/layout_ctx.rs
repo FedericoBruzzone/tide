@@ -1,22 +1,23 @@
-use crate::{syntax::TirTy, tir::TirCtx};
+use crate::{ctx::TirCtx, ty, TirTy};
 use tidec_abi::{
     layout::{BackendRepr, Layout, Primitive, TyAndLayout},
     size_and_align::{AbiAndPrefAlign, Size},
+    target::AddressSpace,
 };
 
-pub struct LayoutCtx<'a> {
-    lir_ctx: &'a TirCtx,
+pub struct LayoutCtx<'ctx> {
+    lir_ctx: &'ctx TirCtx<'ctx>,
 }
 
-impl<'a> LayoutCtx<'a> {
+impl<'ctx> LayoutCtx<'ctx> {
     // It accepts the `TirCtx` because it contains the `TargetDataLayout`.
-    pub fn new(lir_ctx: &'a TirCtx) -> Self {
+    pub fn new(lir_ctx: &'ctx TirCtx<'ctx>) -> Self {
         LayoutCtx { lir_ctx }
     }
 
     /// Computes the layout for a given type. We should cache the results
     /// to avoid recomputing the layout for the same type multiple times.
-    pub fn compute_layout(&self, ty: TirTy) -> TyAndLayout<TirTy> {
+    pub fn compute_layout(&self, ty: TirTy<'ctx>) -> TyAndLayout<TirTy<'ctx>> {
         let data_layout = &self.lir_ctx.target().data_layout;
 
         let scalar = |primitive: Primitive| -> (Size, AbiAndPrefAlign, BackendRepr) {
@@ -43,25 +44,41 @@ impl<'a> LayoutCtx<'a> {
             (size, align, BackendRepr::Scalar(primitive))
         };
 
-        let (size, align, backend_repr) = match ty {
-            TirTy::I8 => scalar(Primitive::I8),
-            TirTy::I16 => scalar(Primitive::I16),
-            TirTy::I32 => scalar(Primitive::I32),
-            TirTy::I64 => scalar(Primitive::I64),
-            TirTy::I128 => scalar(Primitive::I128),
-            TirTy::U8 => scalar(Primitive::U8),
-            TirTy::U16 => scalar(Primitive::U16),
-            TirTy::U32 => scalar(Primitive::U32),
-            TirTy::U64 => scalar(Primitive::U64),
-            TirTy::U128 => scalar(Primitive::U128),
-            TirTy::F16 => scalar(Primitive::F16),
-            TirTy::F32 => scalar(Primitive::F32),
-            TirTy::F64 => scalar(Primitive::F64),
-            TirTy::F128 => scalar(Primitive::F128),
+        let (size, align, backend_repr) = match &**ty {
+            ty::TirTy::I8 => scalar(Primitive::I8),
+            ty::TirTy::I16 => scalar(Primitive::I16),
+            ty::TirTy::I32 => scalar(Primitive::I32),
+            ty::TirTy::I64 => scalar(Primitive::I64),
+            ty::TirTy::I128 => scalar(Primitive::I128),
+            ty::TirTy::U8 => scalar(Primitive::U8),
+            ty::TirTy::U16 => scalar(Primitive::U16),
+            ty::TirTy::U32 => scalar(Primitive::U32),
+            ty::TirTy::U64 => scalar(Primitive::U64),
+            ty::TirTy::U128 => scalar(Primitive::U128),
+            ty::TirTy::F16 => scalar(Primitive::F16),
+            ty::TirTy::F32 => scalar(Primitive::F32),
+            ty::TirTy::F64 => scalar(Primitive::F64),
+            ty::TirTy::F128 => scalar(Primitive::F128),
+            ty::TirTy::RawPtr(ref pointee, _) => {
+                // We ignore the backend representation of the pointee type for now. This is because
+                // we are only interested in the pointer type itself, which has a fixed size and alignment
+                // regardless of the pointee type. However, in the future, we might want to consider
+                // the pointee type for more advanced optimizations or analyses.
+                let (size, align, _) = scalar(Primitive::Pointer(AddressSpace::DATA));
+
+                if pointee.is_sized() {
+                    (size, align, BackendRepr::Scalar(Primitive::Pointer(AddressSpace::DATA)))
+                } else {
+                    unimplemented!("Layout computation for unsized pointee types is not yet supported.")
+                }
+            }
+            // TirTy::FnPty { param_tys, ret_ty } => {
+            //     todo!()
+            // }
             // TODO: Implement layout computation for Metadata types (e.g., for unsized types or trait objects).
             // Metadata represents type information for unsized types (such as slices or trait objects),
             // which require special handling for their layout. Support for this will be added in a future release.
-            TirTy::Metadata => unimplemented!("Layout computation for TirTy::Metadata (used for unsized types/trait objects) is not yet supported. See TODO comment for details."),
+            ty::TirTy::Metadata => unimplemented!("Layout computation for TirTy::Metadata (used for unsized types/trait objects) is not yet supported. See TODO comment for details."),
         };
 
         TyAndLayout {

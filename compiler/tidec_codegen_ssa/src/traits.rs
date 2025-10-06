@@ -4,8 +4,10 @@ use tidec_abi::{
     size_and_align::{Align, Size},
 };
 use tidec_tir::{
-    syntax::{ConstScalar, Local, LocalData, TirTy},
-    tir::{TirBody, TirBodyMetadata, TirCtx, TirUnit},
+    TirTy,
+    body::{TirBody, TirBodyMetadata, TirUnit},
+    ctx::TirCtx,
+    syntax::{ConstScalar, Local, LocalData},
 };
 use tidec_utils::index_vec::IdxVec;
 
@@ -13,18 +15,18 @@ use crate::tir::{OperandRef, PlaceRef};
 
 /// This trait is used to get the layout of a type.
 /// It is used to get the layout of a type in the codegen backend.
-pub trait LayoutOf {
+pub trait LayoutOf<'ctx> {
     /// Returns the layout of the given type.
-    fn layout_of(&self, ty: TirTy) -> TyAndLayout<TirTy>;
+    fn layout_of(&self, ty: TirTy<'ctx>) -> TyAndLayout<TirTy<'ctx>>;
 }
 
-pub trait FnAbiOf {
+pub trait FnAbiOf<'ctx> {
     /// Returns the function ABI for the given return type and argument types.
     fn fn_abi_of(
         &self,
-        lit_ty_ctx: &TirCtx,
-        ret_and_args: &IdxVec<Local, LocalData>,
-    ) -> FnAbi<TirTy>;
+        lit_ty_ctx: TirCtx<'ctx>,
+        ret_and_args: &IdxVec<Local, LocalData<'ctx>>,
+    ) -> FnAbi<TirTy<'ctx>>;
 }
 
 /// This trait is used to define the types used in the codegen backend.
@@ -65,38 +67,38 @@ pub trait CodegenBackend: Sized + CodegenBackendTypes {
 
 /// The pre-definition methods for the codegen backend. It is used to pre-define functions.
 /// After pre-defining all functions, the bodies should be defined (see `DefineCodegenMethods`).
-pub trait PreDefineCodegenMethods: Sized + CodegenBackendTypes {
+pub trait PreDefineCodegenMethods<'ctx>: Sized + CodegenBackendTypes {
     fn predefine_body(
         &self,
         lir_body_metadata: &TirBodyMetadata,
-        lir_body_ret_and_args: &IdxVec<Local, LocalData>,
+        lir_body_ret_and_args: &IdxVec<Local, LocalData<'ctx>>,
     );
 }
 
 /// The definition methods for the codegen backend. It is used to define (compile) function bodies.
 /// The definition should be done after pre-defining all functions (see `PreDefineCodegenMethods`).
-pub trait DefineCodegenMethods: Sized + CodegenBackendTypes {
-    fn define_body(&self, lir_body: &TirBody);
+pub trait DefineCodegenMethods<'ctx>: Sized + CodegenBackendTypes {
+    fn define_body(&self, lir_body: TirBody<'ctx>);
 }
 
 /// The codegen backend methods.
-pub trait CodegenMethods<'be>:
+pub trait CodegenMethods<'ctx>:
     Sized
-    + LayoutOf
-    + FnAbiOf
+    + LayoutOf<'ctx>
+    + FnAbiOf<'ctx>
     + CodegenBackendTypes
     + CodegenBackend
-    + PreDefineCodegenMethods
-    + DefineCodegenMethods
+    + PreDefineCodegenMethods<'ctx>
+    + DefineCodegenMethods<'ctx>
 {
     /// Creates a new codegen context for the given TIR type context and module.
-    fn new(lir_ty_ctx: TirCtx, context: &'be Self::Context, module: Self::Module) -> Self;
+    fn new(lir_ty_ctx: TirCtx<'ctx>, context: &'ctx Self::Context, module: Self::Module) -> Self;
 
     /// Return the TIR type context associated with this codegen context.
-    fn tir_ctx(&self) -> &TirCtx;
+    fn tir_ctx(&self) -> TirCtx<'ctx>;
 
     /// Compile the given TIR unit.
-    fn compile_lir_unit<'a, B: BuilderMethods<'a, 'be>>(&self, lir_unit: TirUnit);
+    fn compile_lir_unit<'be, B: BuilderMethods<'be, 'ctx>>(&self, lir_unit: TirUnit<'ctx>);
 
     /// Emit the output of the codegen backend.
     /// This could be writing to a file ASM, object file, or JIT execution.
@@ -110,17 +112,17 @@ pub trait CodegenMethods<'be>:
     fn get_or_define_fn(
         &self,
         lir_fn_metadata: &TirBodyMetadata,
-        lir_fn_ret_and_args: &IdxVec<Local, LocalData>,
+        lir_fn_ret_and_args: &IdxVec<Local, LocalData<'ctx>>,
     ) -> Self::FunctionValue;
 }
 
 /// The builder methods for the codegen backend.
 /// This trait is used to define the methods used in the codegen backend.
-pub trait BuilderMethods<'a, 'be>: Sized + CodegenBackendTypes {
+pub trait BuilderMethods<'be, 'ctx>: Sized + CodegenBackendTypes {
     /// The associated codegen context type.
     /// This ensures that the codegen context is compatible with the codegen backend types.
     type CodegenCtx: CodegenMethods<
-            'be,
+            'ctx,
             BasicBlock = Self::BasicBlock,
             Type = Self::Type,
             Value = Self::Value,
@@ -139,13 +141,13 @@ pub trait BuilderMethods<'a, 'be>: Sized + CodegenBackendTypes {
 
     /// Create a new builder for the given codegen context and basic block.
     /// The builder is positioned at the end of the basic block.
-    fn build(ctx: &'a Self::CodegenCtx, bb: Self::BasicBlock) -> Self;
+    fn build(ctx: &'be Self::CodegenCtx, bb: Self::BasicBlock) -> Self;
 
     /// Append a new basic block to the given function value with the given name.
     /// The name can be empty, in which case a unique name will be generated.
     /// The function value is assumed to be valid and belong to the same context as the codegen context.
     fn append_basic_block(
-        ctx: &'a Self::CodegenCtx,
+        ctx: &'be Self::CodegenCtx,
         fn_value: Self::FunctionValue,
         name: &str,
     ) -> Self::BasicBlock;
@@ -162,7 +164,10 @@ pub trait BuilderMethods<'a, 'be>: Sized + CodegenBackendTypes {
 
     /// Load an operand from the given place reference.
     /// This is used to load a value from memory.
-    fn load_operand(&mut self, place_ref: &PlaceRef<Self::Value>) -> OperandRef<Self::Value>;
+    fn load_operand(
+        &mut self,
+        place_ref: &PlaceRef<'ctx, Self::Value>,
+    ) -> OperandRef<'ctx, Self::Value>;
 
     /// Build a floating-point negation instruction for the given value.
     fn build_fneg(&mut self, val: Self::Value) -> Self::Value;
@@ -212,6 +217,6 @@ pub trait BuilderMethods<'a, 'be>: Sized + CodegenBackendTypes {
     fn const_scalar_to_backend_value(
         &self,
         const_scalar: ConstScalar,
-        ty_layout: TyAndLayout<TirTy>,
+        ty_layout: TyAndLayout<TirTy<'ctx>>,
     ) -> Self::Value;
 }

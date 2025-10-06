@@ -8,11 +8,12 @@ use tidec_abi::{
     layout::TyAndLayout,
     size_and_align::{Align, Size},
 };
-use tidec_tir::basic_blocks::ENTRY_BLOCK;
+use tidec_tir::TirTy;
 use tidec_tir::syntax::ConstValue;
+use tidec_tir::syntax::ENTRY_BLOCK;
 use tidec_tir::{
-    syntax::{Local, LocalData, TirTy},
-    tir::TirBody,
+    body::TirBody,
+    syntax::{Local, LocalData},
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
@@ -27,7 +28,7 @@ use tracing::{debug, instrument};
 ///
 /// The type parameter `V` represents a backend-specific value, such as a machine
 /// register, LLVM value, or other intermediate representation used by the backend.
-pub struct PlaceRef<V: std::fmt::Debug> {
+pub struct PlaceRef<'ctx, V: std::fmt::Debug> {
     /// The backend value of this place.
     ///
     /// This corresponds to the actual value used by the backend for code generation,
@@ -40,7 +41,7 @@ pub struct PlaceRef<V: std::fmt::Debug> {
     /// Provides size, alignment, and ABI information, which is essential for
     /// correct code generation, especially for aggregates, unsized types,
     /// or types with nontrivial ABI requirements.
-    pub ty_layout: TyAndLayout<TirTy>,
+    pub ty_layout: TyAndLayout<TirTy<'ctx>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -49,7 +50,7 @@ pub struct PlaceRef<V: std::fmt::Debug> {
 /// `OperandRef` holds a value that can be used directly in computations,
 /// without necessarily having a memory location. This can include immediate
 /// scalars, scalar pairs (e.g., fat pointers), or references to memory locations.
-pub struct OperandRef<V: std::fmt::Debug> {
+pub struct OperandRef<'ctx, V: std::fmt::Debug> {
     /// The actual value of the operand in the backend.
     ///
     /// May be an immediate scalar, a pair of scalars, or a reference to a `PlaceVal`.
@@ -58,28 +59,28 @@ pub struct OperandRef<V: std::fmt::Debug> {
     ///
     /// Provides size, alignment, and ABI information needed for correct
     /// code generation and backend handling.
-    pub ty_layout: TyAndLayout<TirTy>,
+    pub ty_layout: TyAndLayout<TirTy<'ctx>>,
 }
 
-impl<V: std::fmt::Debug> OperandRef<V> {
-    pub fn new_zst(ty_layout: TyAndLayout<TirTy>) -> Self {
+impl<'be, 'ctx, V: std::fmt::Debug> OperandRef<'ctx, V> {
+    pub fn new_zst(ty_layout: TyAndLayout<TirTy<'ctx>>) -> Self {
         OperandRef {
             operand_val: OperandVal::Zst,
             ty_layout,
         }
     }
 
-    pub fn new_immediate(value: V, ty_layout: TyAndLayout<TirTy>) -> Self {
+    pub fn new_immediate(value: V, ty_layout: TyAndLayout<TirTy<'ctx>>) -> Self {
         OperandRef {
             operand_val: OperandVal::Immediate(value),
             ty_layout,
         }
     }
 
-    pub fn from_const<'a, 'be, B: BuilderMethods<'a, 'be, Value = V>>(
+    pub(crate) fn from_const<B: BuilderMethods<'be, 'ctx, Value = V>>(
         builder: &mut B,
         const_val: ConstValue,
-        lir_ty: TirTy,
+        lir_ty: TirTy<'ctx>,
     ) -> Self {
         let ty_layout = builder.ctx().layout_of(lir_ty);
         let be_val = match const_val {
@@ -134,10 +135,10 @@ impl<T: std::fmt::Debug> OperandVal<T> {
     }
 }
 
-impl<'a, 'be, V: Copy + PartialEq + std::fmt::Debug> PlaceRef<V> {
-    pub fn alloca<B: BuilderMethods<'a, 'be, Value = V>>(
+impl<'be, 'ctx, V: Copy + PartialEq + std::fmt::Debug> PlaceRef<'ctx, V> {
+    pub fn alloca<B: BuilderMethods<'be, 'ctx, Value = V>>(
         builder: &mut B,
-        ty_and_layout: TyAndLayout<TirTy>,
+        ty_and_layout: TyAndLayout<TirTy<'ctx>>,
     ) -> Self {
         assert!(!ty_and_layout.is_zst());
         PlaceVal::alloca(
@@ -197,20 +198,20 @@ impl<'a, 'be, V: Copy + PartialEq + std::fmt::Debug> PlaceVal<V> {
 ///
 /// From a source-level perspective, locals can be thought of as
 /// variables declared within a function scope.
-pub enum LocalRef<V: std::fmt::Debug> {
+pub enum LocalRef<'ctx, V: std::fmt::Debug> {
     /// A local backed by a memory location with associated layout and alignment metadata.
     ///
     /// From a source-level perspective, this corresponds to variables
     /// that have a defined memory location, such as stack-allocated variables.
     /// See [`tided_lir::syntax::Place`] for more details.
-    PlaceRef(PlaceRef<V>),
+    PlaceRef(PlaceRef<'ctx, V>),
     /// A local represented as an operand value, which can be used directly in computations.
     ///
     /// From a source-level perspective, this corresponds to temporary values
     /// that do not have a dedicated memory location, such as intermediate
     /// results in expressions.
     /// See [`tidec_tir::syntax::Operand`] for more details.
-    OperandRef(OperandRef<V>),
+    OperandRef(OperandRef<'ctx, V>),
     /// A local that is yet to be assigned a value.
     /// This is a placeholder for locals that will be initialized later.
     /// It is used to represent uninitialized locals during code generation.
@@ -227,17 +228,17 @@ pub enum LocalRef<V: std::fmt::Debug> {
 // ) { ... }
 // ```
 // function in rustc_codegen_ssa/src/mir/mod.rs
-pub fn codegen_lir_body<'a, 'be, B: BuilderMethods<'a, 'be>>(
-    ctx: &'a B::CodegenCtx,
-    lir_body: &'a TirBody,
+pub fn codegen_tir_body<'be, 'ctx, B: BuilderMethods<'be, 'ctx>>(
+    ctx: &'be B::CodegenCtx,
+    lir_body: TirBody<'ctx>,
 ) {
     let fn_abi = ctx.fn_abi_of(ctx.tir_ctx(), &lir_body.ret_and_args);
     let fn_value = ctx.get_or_define_fn(&lir_body.metadata, &lir_body.ret_and_args);
     let entry_bb = B::append_basic_block(ctx, fn_value, "entry");
     let mut start_builder = B::build(ctx, entry_bb);
 
-    let cached_bbs = lir_body
-        .basic_blocks
+    let bbs = lir_body.basic_blocks.clone();
+    let cached_bbs = bbs
         .indices()
         .map(|bb| {
             if bb == ENTRY_BLOCK {
@@ -248,7 +249,7 @@ pub fn codegen_lir_body<'a, 'be, B: BuilderMethods<'a, 'be>>(
         })
         .collect();
 
-    let mut fn_ctx = FnCtx::<'_, '_, B> {
+    let mut fn_ctx = FnCtx::<'be, 'ctx, B> {
         fn_abi,
         lir_body,
         fn_value,
@@ -258,7 +259,7 @@ pub fn codegen_lir_body<'a, 'be, B: BuilderMethods<'a, 'be>>(
     };
 
     let mut allocate_locals =
-        |locals: &IdxVec<Local, LocalData>| -> IdxVec<Local, LocalRef<B::Value>> {
+        |locals: &IdxVec<Local, LocalData<'ctx>>| -> IdxVec<Local, LocalRef<'ctx, B::Value>> {
             let mut local_allocas = IdxVec::new();
 
             for (local, local_data) in locals.iter_enumerated() {
@@ -294,7 +295,7 @@ pub fn codegen_lir_body<'a, 'be, B: BuilderMethods<'a, 'be>>(
     drop(start_builder);
 
     // Codegen each basic block in the function body.
-    for bb in lir_body.basic_blocks.indices() {
+    for bb in bbs.indices() {
         fn_ctx.codegen_basic_block(bb);
         // TODO(bruzzone): consider to remove unreached blocks here
     }

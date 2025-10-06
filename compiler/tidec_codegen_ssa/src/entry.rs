@@ -7,9 +7,7 @@ use tidec_abi::{
     layout::TyAndLayout,
 };
 use tidec_tir::{
-    basic_blocks::{BasicBlock, BasicBlockData},
-    syntax::{BinaryOp, Local, Operand, Place, RETURN_LOCAL, RValue, Statement, Terminator, TirTy},
-    tir::TirBody,
+    body::TirBody, syntax::{BasicBlock, BasicBlockData, BinaryOp, Local, Operand, Place, RValue, Statement, Terminator, RETURN_LOCAL}, TirTy
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, info, instrument};
@@ -19,47 +17,47 @@ use crate::{
     traits::BuilderMethods,
 };
 
-pub struct FnCtx<'a, 'be, B: BuilderMethods<'a, 'be>> {
+pub struct FnCtx<'be, 'ctx, B: BuilderMethods<'be, 'ctx>> {
     /// The function ABI.
     /// This contains information about the calling convention,
     /// argument types, return type, etc.
-    pub fn_abi: FnAbi<TirTy>,
+    pub fn_abi: FnAbi<TirTy<'ctx>>,
 
     /// The body of the function in TIR.
-    pub lir_body: &'a TirBody,
+    pub lir_body: TirBody<'ctx>,
 
     /// The function value.
     /// This is the function that will be generated.
     pub fn_value: B::FunctionValue,
 
     /// The codegen context.
-    pub ctx: &'a B::CodegenCtx,
+    pub ctx: &'be B::CodegenCtx,
 
     /// The allocated locals and temporaries for the function.
     ///
     /// Note that the `B::Value` type is used to represent the local references.
-    pub locals: IdxVec<Local, LocalRef<B::Value>>,
+    pub locals: IdxVec<Local, LocalRef<'ctx, B::Value>>,
 
     /// A cache of the basic blocks in the function.
     /// This is also used to avoid creating multiple basic blocks for the same TIR basic block.
     pub cached_bbs: IdxVec<BasicBlock, Option<B::BasicBlock>>,
 }
 
-impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
+impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
     /// Codegen the given TIR basic block.
     /// This creates a new builder for the basic block and generates the instructions in it.
     /// It also updates the `cached_bbs` field to avoid creating multiple basic blocks for the same TIR basic block.
     /// Note that this function does not handle unreachable blocks.
     pub fn codegen_basic_block(&mut self, bb: BasicBlock) {
         let be_bb = self.get_or_insert_bb(bb);
-        let mut builder = B::build(self.ctx, be_bb);
-        let bb_data: &BasicBlockData = &self.lir_body.basic_blocks[bb];
+        let builder = &mut B::build(self.ctx, be_bb);
+        let bb_data: BasicBlockData<'ctx> = self.lir_body.basic_blocks[bb].clone();
         debug!("Codegen basic block {:?}: {:?}", bb, bb_data);
         for stmt in &bb_data.statements {
-            self.codegen_statement(&mut builder, stmt);
+            self.codegen_statement(builder, stmt);
         }
         let term = &bb_data.terminator;
-        self.codegen_terminator(&mut builder, term);
+        self.codegen_terminator(builder, term);
     }
 
     /// Get the backend basic block for the given TIR basic block.
@@ -78,7 +76,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     /// Codegen the given TIR statement.
     /// This function is called by `codegen_basic_block` for each statement in the basic block.
     /// It generates the corresponding instructions in the backend.
-    fn codegen_statement(&mut self, builder: &mut B, stmt: &Statement) {
+    fn codegen_statement(&mut self, builder: &mut B, stmt: &Statement<'ctx>) {
         // TODO(bruzzone): handle span for debugging here
         match stmt {
             Statement::Assign(assig) => {
@@ -129,8 +127,8 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     pub fn codegen_rvalue(
         &mut self,
         _builder: &mut B,
-        _place_ref: PlaceRef<B::Value>,
-        _rvalue: &RValue,
+        _place_ref: PlaceRef<'ctx, B::Value>,
+        _rvalue: &RValue<'ctx>,
     ) {
         todo!("Implement codegen_rvalue");
     }
@@ -141,8 +139,8 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     pub fn codegen_rvalue_operand(
         &mut self,
         builder: &mut B,
-        rvalue: &RValue,
-    ) -> OperandRef<B::Value> {
+        rvalue: &RValue<'ctx>,
+    ) -> OperandRef<'ctx, B::Value> {
         match rvalue {
             RValue::Operand(operand) => self.codegen_operand(builder, operand),
             RValue::UnaryOp(unary_op, operand) => {
@@ -195,7 +193,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
                 OperandRef::new_immediate(
                     operand_val,
                     builder.ctx().layout_of(bin_op.ty(
-                        builder.ctx().tir_ctx(),
+                        &builder.ctx().tir_ctx(),
                         lhs_ref.ty_layout.ty,
                         rhs_ref.ty_layout.ty,
                     )),
@@ -275,7 +273,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
         }
     }
 
-    fn codegen_operand(&mut self, builder: &mut B, operand: &Operand) -> OperandRef<B::Value> {
+    fn codegen_operand(&mut self, builder: &mut B, operand: &Operand<'ctx>) -> OperandRef<'ctx, B::Value> {
         match operand {
             Operand::Const(const_operand) => {
                 OperandRef::from_const(builder, const_operand.value(), const_operand.ty())
@@ -289,7 +287,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     /// that needs to be replaced with a concrete operand ref.
     /// This is typically done when we first create a pending operand ref
     /// and then later we codegen the rvalue and get the actual operand ref.
-    fn overwrite_local(&mut self, local: Local, new_ref: LocalRef<B::Value>) {
+    fn overwrite_local(&mut self, local: Local, new_ref: LocalRef<'ctx, B::Value>) {
         debug!("Overwriting local {:?} with {:?}", local, new_ref);
         self.locals[local] = new_ref;
     }
@@ -297,11 +295,70 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     /// Codegen the given TIR terminator.
     /// This function is called by `codegen_basic_block` for the terminator of the basic block.
     /// It generates the corresponding instructions in the backend.
-    fn codegen_terminator(&mut self, builder: &mut B, term: &Terminator) {
+    fn codegen_terminator(&mut self, builder: &mut B, term: &Terminator<'ctx>) {
         debug!("Codegen terminator: {:?}", term);
         match term {
             Terminator::Return => self.codegen_return_terminator(builder),
+            Terminator::Call { func, args, destination, target } => self.codegen_call_terminator(builder, func, args, destination, *target),
         }
+    }
+
+    fn codegen_call_terminator(
+        &mut self,
+        builder: &mut B,
+        func: &Operand<'ctx>,
+        args: &[Operand<'ctx>],
+        destination: &Place,
+        target: BasicBlock,
+    ) {
+        // This is the callee function reference. `func` is either a function pointer or a direct function.
+        let func_ref = self.codegen_operand(builder, &func);
+        let arg_vals: Vec<B::Value> = args
+            .iter()
+            .map(|arg| {
+                let arg_ref = self.codegen_operand(builder, arg);
+                match arg_ref.operand_val {
+                    OperandVal::Immediate(val) => val,
+                    OperandVal::Pair(_, _) => {
+                        todo!("Handle wide pointer arguments in function calls")
+                    }
+                    OperandVal::Ref(_) => {
+                        panic!("Cannot pass argument by reference in function call")
+                    }
+                    OperandVal::Zst => {
+                        panic!("Cannot pass ZST argument in function call")
+                    }
+                }
+            })
+            .collect();
+
+        // let ret_val = match func_ref.operand_val {
+        //     OperandVal::Immediate(func_val) => builder.build_call(func_val, &arg_vals),
+        //     OperandVal::Pair(_, _) => {
+        //         todo!("Handle wide pointer function calls")
+        //     }
+        //     OperandVal::Ref(_) => {
+        //         panic!("Cannot call a function by reference");
+        //     }
+        //     OperandVal::Zst => {
+        //         panic!("Cannot call a ZST function");
+        //     }
+        // };
+
+        // // Handle the return value based on the function ABI
+        // match self.fn_abi.ret.mode {
+        //     PassMode::Ignore | PassMode::Indirect => {
+        //         // Nothing to do for ignored or indirect returns
+        //     }
+        //     PassMode::Direct => {
+        //         let dest_ref = self.codegen_place(destination);
+        //         builder.store_operand(&dest_ref, &OperandRef::new_immediate(ret_val, self.fn_abi.ret.layout));
+        //     }
+        // }
+
+        // // Jump to the target basic block
+        // let be_target_bb = self.get_or_insert_bb(target);
+        // builder.build_br(be_target_bb);
     }
 
     /// Codegen a return terminator.
@@ -338,7 +395,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     /// For example, if the place is a ZST, it returns a ZST operand.
     /// If the place is already an operand ref, it returns it directly.
     /// Otherwise, it generates the place and loads the value from it.
-    fn codegen_consume(&mut self, builder: &mut B, place: &Place) -> OperandRef<B::Value> {
+    fn codegen_consume(&mut self, builder: &mut B, place: &Place) -> OperandRef<'ctx, B::Value> {
         let layout = builder
             .ctx()
             .layout_of(self.lir_body.ret_and_args[place.local].ty);
@@ -355,7 +412,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
         builder.load_operand(&place_ref)
     }
 
-    fn try_codegen_consume_operand(&self, place: &Place) -> Option<OperandRef<B::Value>> {
+    fn try_codegen_consume_operand(&self, place: &Place) -> Option<OperandRef<'ctx, B::Value>> {
         match self.locals[place.local] {
             LocalRef::OperandRef(operand_ref) => {
                 // TODO(bruzzone): we should handle projections here
@@ -370,7 +427,7 @@ impl<'ctx, 'll, B: BuilderMethods<'ctx, 'll>> FnCtx<'ctx, 'll, B> {
     /// This function generates the place reference for the given TIR place.
     /// It currently only handles local places.
     // TODO(bruzzone): consider add the builder as parameter to this function
-    fn codegen_place(&mut self, place: &Place) -> PlaceRef<B::Value> {
+    fn codegen_place(&mut self, place: &Place) -> PlaceRef<'ctx, B::Value> {
         let local = place.local;
         match self.locals[local] {
             LocalRef::PlaceRef(place_ref) => place_ref,

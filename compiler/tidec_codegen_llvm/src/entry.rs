@@ -1,7 +1,7 @@
 use crate::{builder::CodegenBuilder, context::CodegenCtx};
 use inkwell::context::Context;
 use tidec_codegen_ssa::traits::CodegenMethods;
-use tidec_tir::tir::{TirCtx, TirUnit};
+use tidec_tir::body::{TirCtx, TirUnit};
 use tracing::instrument;
 
 #[instrument(level = "info", skip(lir_ctx, lir_unit), fields(unit = %lir_unit.metadata.unit_name))]

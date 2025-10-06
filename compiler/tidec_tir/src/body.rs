@@ -1,14 +1,5 @@
-use crate::{
-    basic_blocks::{BasicBlock, BasicBlockData},
-    layout_ctx::LayoutCtx,
-    syntax::{Body, Local, LocalData, TirTy},
-};
-use tidec_abi::{
-    layout::TyAndLayout,
-    target::{BackendKind, TirTarget},
-};
-use tidec_utils::index_vec::IdxVec;
-use tracing::{debug, instrument};
+use crate::syntax::{BasicBlock, BasicBlockData, Local, LocalData};
+use tidec_utils::{idx::Idx, index_vec::IdxVec};
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy)]
 pub struct DefId(pub usize);
@@ -242,25 +233,29 @@ pub struct TirBodyMetadata {
     pub call_conv: CallConv,
 }
 
+#[derive(Eq, PartialEq)]
+/// A body identifier in the TIR. A body can be a function, a closure, etc.
+pub struct Body(usize);
+
 /// The body of a function in TIR. A body could be a function, a closure, a coroutine, etc.
 /// A body is expected to be monomorphized and specialized, that is, when generic parameters are
 /// involved, each instantiation of the generics should have its own body.
 ///
 /// Semantically, a body is a portion of code that constitutes a complete unit of execution.
-pub struct TirBody {
+pub struct TirBody<'ctx> {
     /// The metadata of the function.
     // TODO(bruzzone): consider to detach the metadata from the body
     pub metadata: TirBodyMetadata,
 
     /// The locals for return value and arguments of the function.
     /// The first local is the return value, and the rest are the arguments.
-    pub ret_and_args: IdxVec<Local, LocalData>,
+    pub ret_and_args: IdxVec<Local, LocalData<'ctx>>,
 
     /// The rest of the locals.
-    pub locals: IdxVec<Local, LocalData>,
+    pub locals: IdxVec<Local, LocalData<'ctx>>,
 
     /// The basic blocks of the function.
-    pub basic_blocks: IdxVec<BasicBlock, BasicBlockData>,
+    pub basic_blocks: IdxVec<BasicBlock, BasicBlockData<'ctx>>,
 }
 
 /// The metadata of a TIR unit (module).
@@ -269,61 +264,29 @@ pub struct TirUnitMetadata {
 }
 
 /// The TIR unit (module).
-pub struct TirUnit {
+pub struct TirUnit<'ctx> {
     /// The metadata of the unit.
     pub metadata: TirUnitMetadata,
 
     /// The functions in the unit.
-    pub bodies: IdxVec<Body, TirBody>,
+    pub bodies: IdxVec<Body, TirBody<'ctx>>,
 }
 
-#[derive(Debug)]
-/// The kind of code to emit.
-pub enum EmitKind {
-    Object,
-    Assembly,
-    LlvmIr,
-}
 
-#[derive(Debug)]
-/// The arguments for TIR type context. Usually provided by the user.
-pub struct TirArgs {
-    pub emit_kind: EmitKind,
-    // TODO(bruzzone): add more arguments here
-}
-
-#[derive(Debug)]
-pub struct TirCtx {
-    target: TirTarget,
-    arguments: TirArgs,
-    // TODO(bruzzone): here we should have, other then an arena, also a HashMap from DefId
-    // to the body of the function.
-}
-
-impl TirCtx {
-    #[instrument]
-    pub fn new(codegen_backend: BackendKind, emit_kind: EmitKind) -> Self {
-        let target = TirTarget::new(codegen_backend);
-        let arguments = TirArgs { emit_kind };
-        let ctx = TirCtx { target, arguments };
-        debug!("TirTyCtx created: {:?}", ctx);
-        ctx
+impl Idx for Body {
+    fn new(idx: usize) -> Self {
+        Body(idx)
     }
 
-    pub fn target(&self) -> &TirTarget {
-        &self.target
+    fn idx(&self) -> usize {
+        self.0
     }
 
-    pub fn layout_of(&self, ty: TirTy) -> TyAndLayout<TirTy> {
-        let layout_ctx = LayoutCtx::new(self);
-        layout_ctx.compute_layout(ty)
+    fn incr(&mut self) {
+        self.0 += 1;
     }
 
-    pub fn backend_kind(&self) -> &BackendKind {
-        &self.target.codegen_backend
-    }
-
-    pub fn emit_kind(&self) -> &EmitKind {
-        &self.arguments.emit_kind
+    fn incr_by(&mut self, by: usize) {
+        self.0 += by;
     }
 }

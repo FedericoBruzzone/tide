@@ -34,6 +34,8 @@ impl AbiAndPrefAlign {
 pub struct Size(u64);
 
 impl Size {
+    pub const ZERO: Size = Size(0);
+
     /// Rounds `bits` up to the next-higher byte boundary, if `bits` is
     /// not a multiple of 8.
     pub fn from_bits(bits: impl TryInto<u64>) -> Size {

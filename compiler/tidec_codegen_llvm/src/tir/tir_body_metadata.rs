@@ -1,5 +1,5 @@
 use inkwell::{module::Linkage, values::UnnamedAddress, GlobalVisibility};
-use tidec_tir::tir;
+use tidec_tir::body;
 
 /// A trait to convert TirLinkage into LLVM Linkage.
 ///
@@ -33,46 +33,46 @@ pub trait UnnamedAddressUtils {
     fn into_unnamed_address(self) -> UnnamedAddress;
 }
 
-impl LinkageUtils for tir::Linkage {
+impl LinkageUtils for body::Linkage {
     fn into_linkage(self) -> Linkage {
         match self {
-            tir::Linkage::Private => Linkage::LinkerPrivate,
-            tir::Linkage::Internal => Linkage::Internal,
-            tir::Linkage::AvailableExternally => Linkage::AvailableExternally,
-            tir::Linkage::LinkOnce => Linkage::LinkOnceAny,
-            tir::Linkage::Weak => Linkage::WeakAny,
-            tir::Linkage::Common => Linkage::Common,
-            tir::Linkage::Appending => Linkage::Appending,
-            tir::Linkage::ExternWeak => Linkage::ExternalWeak,
-            tir::Linkage::LinkOnceODR => Linkage::LinkOnceODR,
-            tir::Linkage::WeakODR => Linkage::WeakODR,
-            tir::Linkage::External => Linkage::External,
+            body::Linkage::Private => Linkage::LinkerPrivate,
+            body::Linkage::Internal => Linkage::Internal,
+            body::Linkage::AvailableExternally => Linkage::AvailableExternally,
+            body::Linkage::LinkOnce => Linkage::LinkOnceAny,
+            body::Linkage::Weak => Linkage::WeakAny,
+            body::Linkage::Common => Linkage::Common,
+            body::Linkage::Appending => Linkage::Appending,
+            body::Linkage::ExternWeak => Linkage::ExternalWeak,
+            body::Linkage::LinkOnceODR => Linkage::LinkOnceODR,
+            body::Linkage::WeakODR => Linkage::WeakODR,
+            body::Linkage::External => Linkage::External,
         }
     }
 }
 
-impl VisibilityUtils for tir::Visibility {
+impl VisibilityUtils for body::Visibility {
     fn into_visibility(self) -> GlobalVisibility {
         match self {
-            tir::Visibility::Default => GlobalVisibility::Default,
-            tir::Visibility::Hidden => GlobalVisibility::Hidden,
-            tir::Visibility::Protected => GlobalVisibility::Protected,
+            body::Visibility::Default => GlobalVisibility::Default,
+            body::Visibility::Hidden => GlobalVisibility::Hidden,
+            body::Visibility::Protected => GlobalVisibility::Protected,
         }
     }
 }
 
-impl CallConvUtils for tir::CallConv {
+impl CallConvUtils for body::CallConv {
     fn into_call_conv(self) -> u32 {
         self as u32
     }
 }
 
-impl UnnamedAddressUtils for tir::UnnamedAddress {
+impl UnnamedAddressUtils for body::UnnamedAddress {
     fn into_unnamed_address(self) -> UnnamedAddress {
         match self {
-            tir::UnnamedAddress::None => UnnamedAddress::None,
-            tir::UnnamedAddress::Local => UnnamedAddress::Local,
-            tir::UnnamedAddress::Global => UnnamedAddress::Global,
+            body::UnnamedAddress::None => UnnamedAddress::None,
+            body::UnnamedAddress::Local => UnnamedAddress::Local,
+            body::UnnamedAddress::Global => UnnamedAddress::Global,
         }
     }
 }
