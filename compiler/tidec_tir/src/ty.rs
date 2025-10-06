@@ -1,5 +1,5 @@
-use crate::ctx::Interner;
 use std::hash::Hash;
+use tidec_utils::interner::Interner;
 
 #[derive(Debug, Clone, Copy)]
 pub enum TirTy<I: Interner> {

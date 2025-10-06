@@ -26,12 +26,12 @@ use crate::layout::TyAndLayout;
 /// In contrast, a function returning a large struct `fn foo() -> BigStruct`
 /// may use `PassMode::Indirect` for the return value, indicating that the
 /// caller allocates space and passes a hidden pointer where the result is stored.
-pub struct FnAbi<T> {
+pub struct FnAbi<'ctx, T> {
     /// The type, layout, and passing convention for each argument.
-    pub args: Box<[ArgAbi<T>]>,
+    pub args: Box<[ArgAbi<'ctx, T>]>,
 
     /// The type, layout, and passing convention for the return value.
-    pub ret: ArgAbi<T>,
+    pub ret: ArgAbi<'ctx, T>,
 }
 
 /// Describes how a single argument or return value is represented
@@ -39,17 +39,17 @@ pub struct FnAbi<T> {
 ///
 /// Each argument has a memory layout (`TyAndLayout`) and a `PassMode`
 /// describing how it is lowered to machine code.
-pub struct ArgAbi<T> {
+pub struct ArgAbi<'ctx, T> {
     /// The memory layout of the argument or return value
     /// (size, alignment, and type information).
-    pub layout: TyAndLayout<T>,
+    pub layout: TyAndLayout<'ctx, T>,
 
     /// The convention for passing this value to/from the backend.
     pub mode: PassMode,
 }
 
-impl<T> ArgAbi<T> {
-    pub fn new(layout: TyAndLayout<T>, mode: PassMode) -> Self {
+impl<'ctx, T> ArgAbi<'ctx, T> {
+    pub fn new(layout: TyAndLayout<'ctx, T>, mode: PassMode) -> Self {
         ArgAbi { layout, mode }
     }
 }

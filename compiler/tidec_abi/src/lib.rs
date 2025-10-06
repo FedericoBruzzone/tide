@@ -3,4 +3,7 @@ pub mod layout;
 pub mod size_and_align;
 pub mod target;
 
-// pub struct Layout<'ctx>(Interned<'ctx, crate::layout::Layout<crate::ty::TirTy<ctx::TirCtx<'ctx>>>>);
+use tidec_utils::interner::Interned;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Layout<'ctx>(Interned<'ctx, layout::Layout>);

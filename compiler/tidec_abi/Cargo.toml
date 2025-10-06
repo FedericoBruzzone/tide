@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 # tidy-alphabetical-start
+tidec_utils = { path = "../tidec_utils" }
 tracing = "0.1.41"
 # tidy-alphabetical-end
 

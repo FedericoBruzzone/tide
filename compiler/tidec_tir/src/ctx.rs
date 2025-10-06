@@ -1,6 +1,10 @@
-use tidec_abi::{layout::TyAndLayout, target::{BackendKind, TirTarget}};
+use tidec_abi::{
+    layout::TyAndLayout,
+    target::{BackendKind, TirTarget},
+};
+use tidec_utils::interner::Interner;
 
-use crate::{ctx::Interner, layout_ctx::LayoutCtx, TirTy};
+use crate::{layout_ctx::LayoutCtx, TirTy};
 
 #[derive(Debug, Clone, Copy)]
 pub enum EmitKind {
@@ -22,7 +26,7 @@ pub struct TirCtx<'ctx> {
     // to the body of the function.
 }
 
-impl<'ctx> TirCtx<'ctx> { 
+impl<'ctx> TirCtx<'ctx> {
     pub fn target(&self) -> &TirTarget {
         &self.target
     }
