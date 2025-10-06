@@ -3,16 +3,18 @@ use std::num::NonZero;
 //
 use tidec_abi::target::{BackendKind, TirTarget};
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
-use tidec_tir::ctx::{EmitKind, TirArgs, TirCtx};
-use tidec_tir::syntax::{
-    ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue, RawScalarValue,
-    Statement, Terminator, UnaryOp, RETURN_LOCAL,
-};
+use tidec_codegen_llvm::tir::tir_body_metadata;
 use tidec_tir::body::{
-    CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirItemKind,
-    TirUnit, TirUnitMetadata, UnnamedAddress, Visibility,
+    CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirItemKind, TirUnit,
+    TirUnitMetadata, UnnamedAddress, Visibility,
 };
+use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
+use tidec_tir::syntax::{
+    BasicBlockData, ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue, RawScalarValue, Statement, Terminator, UnaryOp, RETURN_LOCAL
+};
+use tidec_tir::ty::TirTy;
 use tidec_utils::index_vec::IdxVec;
+use tidec_utils::interner::Interner;
 use tracing::debug;
 
 // TIDEC_LOG=debug cargo run; cc main.o -o a.out; ./a.out; echo $?
@@ -20,16 +22,15 @@ fn main() {
     init_tidec_logger();
     debug!("Logging initialized");
 
-
     let target = TirTarget::new(BackendKind::Llvm);
-    let arguments = TirArgs { emit_kind: EmitKind::LlvmIr };
-    let intern_ctx = Inte
+    let arguments = TirArgs {
+        emit_kind: EmitKind::LlvmIr,
+    };
+    let tir_arena = TirArena::default();
+    let intern_ctx = InternCtx::new(&tir_arena);
 
     // TODO: check valitiy of TideArgs
-    let lir_ctx = TirCtx {
-        target: &target,
-        arguments: &arguments,
-    };
+    let tir_ctx = TirCtx::new(&target, &arguments, &intern_ctx);
 
     // Create a simple main function that returns 0.
     // ```c
@@ -51,7 +52,8 @@ fn main() {
         metadata: lir_body_metadata,
         ret_and_args: IdxVec::from_raw(vec![LocalData {
             // ty: TirTy::F32,
-            ty: TirTy::I32,
+            // ty: TirTy::I32,
+            ty: tir_ctx.intern_ty(TirTy::<TirCtx>::I32),
             mutable: false,
         }]),
         locals: IdxVec::new(),
@@ -73,7 +75,7 @@ fn main() {
                             data: 7u128,
                             size: NonZero::new(4).unwrap(), // 4 bytes for i32
                         })),
-                        TirTy::I32,
+                        tir_ctx.intern_ty(TirTy::<TirCtx>::I32),
                     )),
                 ),
             )))],
@@ -89,10 +91,10 @@ fn main() {
         bodies: lir_bodies,
     };
 
-    codegen_lir_unit(lir_ctx, lir_unit);
+    codegen_lir_unit(tir_ctx, lir_unit);
 }
 
-pub fn codegen_lir_unit(lir_ctx: TirCtx, lir_unit: TirUnit) {
+pub fn codegen_lir_unit<'ctx>(lir_ctx: TirCtx<'ctx>, lir_unit: TirUnit<'ctx>) {
     match lir_ctx.backend_kind() {
         BackendKind::Llvm => llvm_codegen_lir_unit(lir_ctx, lir_unit),
         BackendKind::Cranelift => todo!(),

@@ -27,7 +27,7 @@ impl<T> Interned<'_, T> {
     /// This function is *not* unsafe to call, but the caller must ensure that
     /// the value is unique. That is, there must not be any other `Interned`
     /// values that refer to the same value.
-    pub unsafe fn new<'a>(value: &'a T) -> Interned<'a, T> {
+    pub fn new<'a>(value: &'a T) -> Interned<'a, T> {
         Interned(value)
     }
 }
