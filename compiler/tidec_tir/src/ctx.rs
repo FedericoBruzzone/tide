@@ -29,6 +29,14 @@ pub struct TirArena<'ctx> {
     types: Vec<Box<ty::TirTy<TirCtx<'ctx>>>>,
 }
 
+impl<'ctx> Default for TirArena<'ctx> {
+    fn default() -> Self {
+        Self {
+            types: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 /// The context for all interned entities in TIR.
 /// 
@@ -40,6 +48,16 @@ pub struct InternCtx<'ctx> {
     /// A set of all interned TIR types.
     types: HashSet<ArenaPrt<'ctx, ty::TirTy<TirCtx<'ctx>>>>,
 }
+
+impl<'ctx> InternCtx<'ctx> {
+    pub fn new(arena: &'ctx TirArena<'ctx>) -> Self {
+        Self {
+            arena,
+            types: HashSet::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct TirCtx<'ctx> {
     target: &'ctx TirTarget,
@@ -52,6 +70,18 @@ pub struct TirCtx<'ctx> {
 }
 
 impl<'ctx> TirCtx<'ctx> {
+    pub fn new(
+        target: &'ctx TirTarget,
+        arguments: &'ctx TirArgs,
+        intern_ctx: &'ctx InternCtx<'ctx>,
+    ) -> Self {
+        Self {
+            target,
+            arguments,
+            intern_ctx,
+        }
+    }
+
     pub fn target(&self) -> &TirTarget {
         &self.target
     }

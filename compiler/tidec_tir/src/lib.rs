@@ -12,6 +12,7 @@ use crate::ctx::TirCtx;
 pub struct TirTy<'ctx>(Interned<'ctx, crate::ty::TirTy<TirCtx<'ctx>>>);
 impl<'ctx> Ty<TirCtx<'ctx>> for TirTy<'ctx> {}
 
+
 impl<'ctx> std::fmt::Debug for TirTy<'ctx> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.0)
