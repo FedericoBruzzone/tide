@@ -3,6 +3,7 @@ use std::{
     cell::{Cell, RefCell},
     collections::HashSet,
     hash::Hash,
+    ops::Deref,
     ptr::NonNull,
 };
 
@@ -34,6 +35,13 @@ pub struct TirArgs {
 /// not be deallocated manually.
 pub struct ArenaPrt<'ctx, T: Sized>(&'ctx T);
 
+// Allow borrowing the underlying value so InternedSet<T> can accept an R = underlying type.
+impl<'ctx, T> Borrow<T> for ArenaPrt<'ctx, T> {
+    fn borrow(&self) -> &T {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone)]
 /// A chunk of memory allocated in the arena.
 ///
@@ -41,7 +49,7 @@ pub struct ArenaPrt<'ctx, T: Sized>(&'ctx T);
 /// the overhead of multiple allocations. Each chunk is a contiguous block of
 /// memory that can hold multiple values of type `T`.
 pub struct ArenaChunk<T = u8> {
-    mem: NonNull<[T]>,
+    _mem: NonNull<[T]>,
 }
 
 #[derive(Debug, Clone)]
@@ -53,7 +61,7 @@ pub struct ArenaDropless {
     end: Cell<*mut u8>,
 
     /// The chunks of memory allocated in the arena.
-    mem: RefCell<Vec<ArenaChunk>>,
+    inner: RefCell<Vec<ArenaChunk>>,
 }
 
 impl ArenaDropless {
@@ -76,9 +84,9 @@ impl ArenaDropless {
                 std::alloc::handle_alloc_error(layout);
             }
             let chunk = ArenaChunk {
-                mem: NonNull::slice_from_raw_parts(NonNull::new(ptr).unwrap(), chunk_size),
+                _mem: NonNull::slice_from_raw_parts(NonNull::new(ptr).unwrap(), chunk_size),
             };
-            self.mem.borrow_mut().push(chunk);
+            self.inner.borrow_mut().push(chunk);
             self.start.set(ptr);
             self.end.set(unsafe { ptr.add(chunk_size) });
         }
@@ -102,20 +110,28 @@ pub struct TirArena<'ctx> {
     /// This avoids the overhead of running destructors when the arena is dropped.
     /// Additionally, since TIR types are immutable after creation, we do not need
     /// to worry about memory leaks.
-    inner: ArenaDropless,
+    dropless: ArenaDropless,
 
     /// The lifetime marker for the arena.
     /// This ensures that the arena lives as long as the context that uses it.
     _marker: std::marker::PhantomData<&'ctx ()>,
 }
 
+impl<'ctx> Deref for TirArena<'ctx> {
+    type Target = ArenaDropless;
+
+    fn deref(&self) -> &Self::Target {
+        &self.dropless
+    }
+}
+
 impl<'ctx> Default for TirArena<'ctx> {
     fn default() -> Self {
         Self {
-            inner: ArenaDropless {
+            dropless: ArenaDropless {
                 start: Cell::new(std::ptr::null_mut()),
                 end: Cell::new(std::ptr::null_mut()),
-                mem: RefCell::new(Vec::new()),
+                inner: RefCell::new(Vec::new()),
             },
             _marker: std::marker::PhantomData,
         }
@@ -137,11 +153,20 @@ impl<T: Sized + Clone + Copy + Eq + std::hash::Hash> InternedSet<T> {
         R: Hash + Eq,
     {
         let set = &self.0;
-        if let Some(existing) = set.borrow().get(value.borrow()) {
-            *existing
+        
+        // Check for existing value, and let the immutable borrow drop immediately
+        let existing = {
+            let set_ref = set.borrow(); // Immutable borrow starts here
+            set_ref.get(value.borrow()).copied() // .copied() is needed because existing is 'T: Copy'
+        }; // Immutable borrow ends here when `set_ref` goes out of scope
+
+        if let Some(existing_value) = existing {
+            // If it exists, return the copied value. No borrow is active now.
+            existing_value
         } else {
+            // If it doesn't exist, we can now safely take a mutable borrow.
             let new = intern_in_arena(value);
-            set.borrow_mut().insert(new);
+            set.borrow_mut().insert(new); // Mutable borrow starts and ends here
             new
         }
     }
@@ -220,9 +245,14 @@ impl<'ctx> TirCtx<'ctx> {
     }
 
     pub fn intern_ty(&self, ty: ty::TirTy<TirCtx<'ctx>>) -> TirTy<'ctx> {
-        TirTy(Interned::new(self.intern_ctx.types.intern(ty, |ty| {
-            ArenaPrt(self.intern_ctx.arena.inner.alloc(ty))
-        }).0))
+        TirTy(Interned::new(
+            self.intern_ctx
+                .types
+                .intern(ty, |ty: ty::TirTy<TirCtx<'ctx>>| {
+                    ArenaPrt(self.intern_ctx.arena.alloc(ty))
+                })
+                .0,
+        ))
     }
 }
 
