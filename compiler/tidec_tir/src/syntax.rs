@@ -1,7 +1,7 @@
+use crate::{ctx::TirCtx, TirTy};
 use std::num::NonZero;
 use tidec_abi::size_and_align::Size;
 use tidec_utils::idx::Idx;
-use crate::{ctx::TirCtx, TirTy};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 /// A `Local` variable in the TIR.
@@ -93,7 +93,6 @@ pub enum Projection {
     Todo,
 }
 
-
 #[derive(Debug, Clone)]
 /// Represents a right-hand side (RValue) in TIR during code generation.
 ///
@@ -155,7 +154,12 @@ pub enum BinaryOp {
 
 impl BinaryOp {
     /// Returns the resulting type of the binary operation, which is the same as the operand types.
-    pub fn ty<'ctx>(&self, tir_ctx: &TirCtx<'ctx>, lhs_ty: TirTy<'ctx>, rhs_ty: TirTy<'ctx>) -> TirTy<'ctx> {
+    pub fn ty<'ctx>(
+        &self,
+        tir_ctx: &TirCtx<'ctx>,
+        lhs_ty: TirTy<'ctx>,
+        rhs_ty: TirTy<'ctx>,
+    ) -> TirTy<'ctx> {
         let _ = tir_ctx;
         let _ = rhs_ty;
         match self {

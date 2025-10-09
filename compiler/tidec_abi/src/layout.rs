@@ -3,7 +3,6 @@ use crate::{
     target::AddressSpace,
 };
 
-
 #[derive(Debug, Clone, Copy)]
 /// Represents a type along with its size and alignment information.
 ///

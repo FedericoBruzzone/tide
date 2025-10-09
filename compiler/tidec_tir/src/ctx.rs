@@ -233,7 +233,7 @@ impl<'ctx> TirCtx<'ctx> {
     }
 
     pub fn target(&self) -> &TirTarget {
-        &self.target
+        self.target
     }
 
     pub fn layout_of(self, ty: TirTy<'ctx>) -> TyAndLayout<'ctx, TirTy<'ctx>> {

@@ -9,7 +9,8 @@ use tidec_tir::body::{
 };
 use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
 use tidec_tir::syntax::{
-    BasicBlockData, ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue, RawScalarValue, Statement, Terminator, UnaryOp, RETURN_LOCAL
+    BasicBlockData, ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue,
+    RawScalarValue, Statement, Terminator, UnaryOp, RETURN_LOCAL,
 };
 use tidec_tir::ty::TirTy;
 use tidec_utils::index_vec::IdxVec;
