@@ -9,7 +9,7 @@ use tidec_utils::interner::{Interned, Ty};
 use crate::ctx::TirCtx;
 
 
-pub struct TirTy<'ctx>(Interned<'ctx, crate::ty::TirTy<TirCtx<'ctx>>>);
+pub struct TirTy<'ctx>(pub Interned<'ctx, crate::ty::TirTy<TirCtx<'ctx>>>);
 impl<'ctx> Ty<TirCtx<'ctx>> for TirTy<'ctx> {}
 
 

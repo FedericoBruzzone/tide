@@ -123,6 +123,8 @@ pub enum RValue<'ctx> {
 
 #[derive(Debug, Clone)]
 pub enum UnaryOp {
+    /// Artihmetic positive (no-op).
+    Pos,
     /// Arithmetic negation.
     Neg,
 }

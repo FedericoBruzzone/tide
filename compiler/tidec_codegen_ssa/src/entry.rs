@@ -7,7 +7,7 @@ use tidec_abi::{
     layout::TyAndLayout,
 };
 use tidec_tir::{
-    body::TirBody, syntax::{BasicBlock, BasicBlockData, BinaryOp, Local, Operand, Place, RValue, Statement, Terminator, RETURN_LOCAL}, TirTy
+    body::TirBody, syntax::{BasicBlock, BasicBlockData, BinaryOp, Local, Operand, Place, RValue, Statement, Terminator, UnaryOp, RETURN_LOCAL}, TirTy
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, info, instrument};
@@ -150,7 +150,8 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                 assert!(operand_val.is_immediate());
 
                 let operand_val = match unary_op {
-                    tidec_tir::syntax::UnaryOp::Neg => {
+                    UnaryOp::Pos => operand_val.immediate(), // No-op for positive
+                    UnaryOp::Neg => {
                         if is_float {
                             builder.build_fneg(operand_val.immediate())
                         } else {
