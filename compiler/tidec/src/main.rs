@@ -62,7 +62,7 @@ fn main() {
                     projection: vec![],
                 },
                 RValue::UnaryOp(
-                    UnaryOp::Neg,
+                    UnaryOp::Pos,
                     Operand::Const(ConstOperand::Value(
                         // ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
                         //     data: 7.7f32.to_bits() as u128,
@@ -70,7 +70,7 @@ fn main() {
                         // })),
                         // TirTy::F32,
                         ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
-                            data: 7u128,
+                            data: 10u128,
                             size: NonZero::new(4).unwrap(), // 4 bytes for i32
                         })),
                         tir_ctx.intern_ty(TirTy::<TirCtx>::I32),

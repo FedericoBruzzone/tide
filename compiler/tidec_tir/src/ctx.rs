@@ -146,6 +146,12 @@ impl<'ctx> Default for TirArena<'ctx> {
 /// internal mutability is required.
 pub struct InternedSet<T: Sized + Eq + std::hash::Hash>(RefCell<HashSet<T>>);
 
+impl<T: Sized + Clone + Copy + Eq + std::hash::Hash> Default for InternedSet<T> {
+    fn default() -> Self {
+        Self(RefCell::new(HashSet::new()))
+    }
+}
+
 impl<T: Sized + Clone + Copy + Eq + std::hash::Hash> InternedSet<T> {
     pub fn intern<R>(&self, value: R, intern_in_arena: impl FnOnce(R) -> T) -> T
     where
@@ -153,7 +159,7 @@ impl<T: Sized + Clone + Copy + Eq + std::hash::Hash> InternedSet<T> {
         R: Hash + Eq,
     {
         let set = &self.0;
-        
+
         // Check for existing value, and let the immutable borrow drop immediately
         let existing = {
             let set_ref = set.borrow(); // Immutable borrow starts here
@@ -187,25 +193,30 @@ pub struct InternCtx<'ctx> {
     arena: &'ctx TirArena<'ctx>,
     /// A set of all interned TIR types.
     types: InternedSet<ArenaPrt<'ctx, ty::TirTy<TirCtx<'ctx>>>>,
+    /// A set of all interned layouts.
+    layouts: InternedSet<ArenaPrt<'ctx, layout::Layout>>,
 }
 
 impl<'ctx> InternCtx<'ctx> {
     pub fn new(arena: &'ctx TirArena<'ctx>) -> Self {
         Self {
             arena,
-            types: InternedSet(RefCell::new(HashSet::new())),
+            types: Default::default(),
+            layouts: Default::default(),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
+/// The main context for TIR compilation.
+///
+/// It holds references to the target, arguments, and intern context.
+/// It provides methods for computing layouts, interning types and layouts,
+/// and accessing target-specific information.
 pub struct TirCtx<'ctx> {
     target: &'ctx TirTarget,
     arguments: &'ctx TirArgs,
-
     intern_ctx: &'ctx InternCtx<'ctx>,
-    // TODO(bruzzone): here we should have, other then an arena, also a HashMap from DefId
-    // to the body of the function.
 }
 
 impl<'ctx> TirCtx<'ctx> {
@@ -240,8 +251,15 @@ impl<'ctx> TirCtx<'ctx> {
     }
 
     // ===== Direct inter =====
-    pub fn intern_layout(&self, _layout: layout::Layout) -> Layout<'ctx> {
-        todo!()
+    pub fn intern_layout(&self, layout: layout::Layout) -> Layout<'ctx> {
+        Layout(Interned::new(
+            self.intern_ctx
+                .layouts
+                .intern(layout, |layout: layout::Layout| {
+                    ArenaPrt(self.intern_ctx.arena.alloc(layout))
+                })
+                .0,
+        ))
     }
 
     pub fn intern_ty(&self, ty: ty::TirTy<TirCtx<'ctx>>) -> TirTy<'ctx> {
