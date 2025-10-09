@@ -20,8 +20,8 @@ pub trait Interner: Sized + Clone + Copy {
 pub struct Interned<'a, T>(&'a T);
 
 impl<T> Interned<'_, T> {
-    /// Creates a new `Interned` value. 
-    /// 
+    /// Creates a new `Interned` value.
+    ///
     /// This function is *not* unsafe to call, but the caller must ensure that
     /// the value is unique. That is, there must not be any other `Interned`
     /// values that refer to the same value.
@@ -29,7 +29,6 @@ impl<T> Interned<'_, T> {
         Interned(value)
     }
 }
-
 
 impl<'a, T> Clone for Interned<'a, T> {
     fn clone(&self) -> Self {
@@ -96,7 +95,6 @@ where
         ptr::hash(self.0, s)
     }
 }
-
 
 impl<T: Debug> Debug for Interned<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

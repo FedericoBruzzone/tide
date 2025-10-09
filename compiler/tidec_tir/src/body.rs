@@ -272,7 +272,6 @@ pub struct TirUnit<'ctx> {
     pub bodies: IdxVec<Body, TirBody<'ctx>>,
 }
 
-
 impl Idx for Body {
     fn new(idx: usize) -> Self {
         Body(idx)

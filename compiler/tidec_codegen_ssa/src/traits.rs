@@ -22,10 +22,7 @@ pub trait LayoutOf<'ctx> {
 
 pub trait FnAbiOf<'ctx> {
     /// Returns the function ABI for the given return type and argument types.
-    fn fn_abi_of(
-        &self,
-        ret_and_args: &IdxVec<Local, LocalData<'ctx>>,
-    ) -> FnAbi<'ctx, TirTy<'ctx>>;
+    fn fn_abi_of(&self, ret_and_args: &IdxVec<Local, LocalData<'ctx>>) -> FnAbi<'ctx, TirTy<'ctx>>;
 }
 
 /// This trait is used to define the types used in the codegen backend.
@@ -90,9 +87,6 @@ pub trait CodegenMethods<'ctx>:
     + PreDefineCodegenMethods<'ctx>
     + DefineCodegenMethods<'ctx>
 {
-    /// Creates a new codegen context for the given TIR type context and module.
-    // fn new(lir_ty_ctx: TirCtx<'ctx>, context: &'ctx Self::Context, module: Self::Module) -> Self;
-
     /// Return the TIR type context associated with this codegen context.
     fn tir_ctx(&self) -> TirCtx<'ctx>;
 

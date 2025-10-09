@@ -29,8 +29,8 @@ use tidec_codegen_ssa::traits::{
     BuilderMethods, CodegenBackend, CodegenBackendTypes, CodegenMethods, DefineCodegenMethods,
     FnAbiOf, LayoutOf, PreDefineCodegenMethods,
 };
-use tidec_tir::syntax::{Local, LocalData, RETURN_LOCAL};
 use tidec_tir::body::{DefId, TirBody, TirBodyMetadata, TirUnit};
+use tidec_tir::syntax::{Local, LocalData, RETURN_LOCAL};
 
 // TODO: Add filelds from rustc/compiler/rustc_codegen_llvm/src/context.rs
 pub struct CodegenCtx<'ctx, 'll> {
@@ -159,7 +159,11 @@ impl<'ctx, 'll> FnAbiOf<'ctx> for CodegenCtx<'ctx, 'll> {
 
 impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
     #[instrument(skip(lir_ctx, ll_context, ll_module))]
-    pub fn new(lir_ctx: TirCtx<'ctx>, ll_context: &'ll Context, ll_module: Module<'ll>) -> CodegenCtx<'ctx, 'll> {
+    pub fn new(
+        lir_ctx: TirCtx<'ctx>,
+        ll_context: &'ll Context,
+        ll_module: Module<'ll>,
+    ) -> CodegenCtx<'ctx, 'll> {
         let internal_target = lir_ctx.target();
         {
             let target_triple_string = internal_target.target_triple_string();
@@ -215,7 +219,6 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
 }
 
 impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
-
     fn tir_ctx(&self) -> TirCtx<'ctx> {
         self.lir_ctx
     }

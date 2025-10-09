@@ -2,7 +2,8 @@ use crate::{ctx::TirCtx, ty, TirTy};
 use tidec_abi::{
     layout::{self, BackendRepr, Primitive},
     size_and_align::{AbiAndPrefAlign, Size},
-    target::AddressSpace, Layout, 
+    target::AddressSpace,
+    Layout,
 };
 
 pub struct LayoutCtx<'ctx> {

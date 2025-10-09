@@ -30,7 +30,9 @@ impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
             ty::TirTy::F64 => BasicTypeEnum::FloatType(ctx.ll_context.f64_type()).into(),
             ty::TirTy::F128 => BasicTypeEnum::FloatType(ctx.ll_context.f128_type()).into(),
             ty::TirTy::RawPtr(_, _) => todo!(),
-            ty::TirTy::Metadata => BasicMetadataTypeEnum::MetadataType(ctx.ll_context.metadata_type()),
+            ty::TirTy::Metadata => {
+                BasicMetadataTypeEnum::MetadataType(ctx.ll_context.metadata_type())
+            }
         }
     }
 

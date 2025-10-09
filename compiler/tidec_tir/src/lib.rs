@@ -1,17 +1,15 @@
-pub mod layout_ctx;
-pub mod ctx;
-pub mod syntax;
 pub mod body;
+pub mod ctx;
+pub mod layout_ctx;
+pub mod syntax;
 pub mod ty;
 
+use crate::ctx::TirCtx;
 use std::ops::Deref;
 use tidec_utils::interner::{Interned, Ty};
-use crate::ctx::TirCtx;
-
 
 pub struct TirTy<'ctx>(pub Interned<'ctx, crate::ty::TirTy<TirCtx<'ctx>>>);
 impl<'ctx> Ty<TirCtx<'ctx>> for TirTy<'ctx> {}
-
 
 impl<'ctx> std::fmt::Debug for TirTy<'ctx> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -26,7 +24,6 @@ impl<'ctx> Clone for TirTy<'ctx> {
 }
 
 impl<'ctx> Copy for TirTy<'ctx> {}
-
 
 impl<'ctx> PartialEq for TirTy<'ctx> {
     fn eq(&self, other: &Self) -> bool {

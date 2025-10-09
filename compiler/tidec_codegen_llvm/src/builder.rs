@@ -1,5 +1,7 @@
 use std::ops::Deref;
 
+use crate::context::CodegenCtx;
+use crate::tir::tir_ty::BasicTypesUtils;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue};
 use inkwell::{basic_block::BasicBlock, builder::Builder};
 use tidec_abi::layout::{BackendRepr, Primitive, TyAndLayout};
@@ -9,8 +11,6 @@ use tidec_codegen_ssa::traits::{BuilderMethods, CodegenBackendTypes};
 use tidec_tir::syntax::ConstScalar;
 use tidec_tir::TirTy;
 use tracing::instrument;
-use crate::context::CodegenCtx;
-use crate::tir::tir_ty::BasicTypesUtils;
 
 /// Macro for generating arithmetic operation methods
 macro_rules! impl_arithmetic_ops {
@@ -147,7 +147,10 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn load_operand(&mut self, place_ref: &PlaceRef<'ctx, Self::Value>) -> OperandRef<'ctx, Self::Value> {
+    fn load_operand(
+        &mut self,
+        place_ref: &PlaceRef<'ctx, Self::Value>,
+    ) -> OperandRef<'ctx, Self::Value> {
         if place_ref.ty_layout.is_zst() {
             return OperandRef::new_zst(place_ref.ty_layout);
         }

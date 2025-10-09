@@ -1,13 +1,15 @@
 use crate::{
     tir::{OperandVal, PlaceRef},
-    traits::{CodegenMethods, LayoutOf, FnAbiOf},
+    traits::{CodegenMethods, FnAbiOf, LayoutOf},
 };
-use tidec_abi::{
-    calling_convention::function::PassMode,
-    layout::TyAndLayout,
-};
+use tidec_abi::{calling_convention::function::PassMode, layout::TyAndLayout};
 use tidec_tir::{
-    body::TirBody, syntax::{BasicBlock, BasicBlockData, BinaryOp, Local, Operand, Place, RValue, Statement, Terminator, UnaryOp, RETURN_LOCAL}, TirTy
+    TirTy,
+    body::TirBody,
+    syntax::{
+        BasicBlock, BasicBlockData, BinaryOp, Local, Operand, Place, RETURN_LOCAL, RValue,
+        Statement, Terminator, UnaryOp,
+    },
 };
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, info, instrument};
@@ -266,7 +268,11 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         }
     }
 
-    fn codegen_operand(&mut self, builder: &mut B, operand: &Operand<'ctx>) -> OperandRef<'ctx, B::Value> {
+    fn codegen_operand(
+        &mut self,
+        builder: &mut B,
+        operand: &Operand<'ctx>,
+    ) -> OperandRef<'ctx, B::Value> {
         match operand {
             Operand::Const(const_operand) => {
                 OperandRef::from_const(builder, const_operand.value(), const_operand.ty())
@@ -292,7 +298,12 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         debug!("Codegen terminator: {:?}", term);
         match term {
             Terminator::Return => self.codegen_return_terminator(builder),
-            Terminator::Call { func, args, destination, target } => self.codegen_call_terminator(builder, func, args, destination, *target),
+            Terminator::Call {
+                func,
+                args,
+                destination,
+                target,
+            } => self.codegen_call_terminator(builder, func, args, destination, *target),
         }
     }
 
@@ -305,7 +316,7 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         _target: BasicBlock,
     ) {
         // This is the callee function reference. `func` is either a function pointer or a direct function.
-        let _func_ref = self.codegen_operand(builder, &func);
+        let _func_ref = self.codegen_operand(builder, func);
         let _arg_vals: Vec<B::Value> = args
             .iter()
             .map(|arg| {
