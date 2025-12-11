@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-13, macos-14] #, windows-latest]
+        os: [ubuntu-latest, macos-15-intel, macos-14] # macos-13, macos-latest, # windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -44,34 +44,22 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install ninja
 
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        run: choco install cmake ninja
-
       # -------------------------------
       # Restore LLVM cache
       # -------------------------------
       - name: Restore LLVM cache (Linux/macOS)
         id: cache-llvm-restore-unix
-        if: runner.os != 'Windows'
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.LLVM_INSTALL_PATH_UNIX }}
           key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
 
-      - name: Restore LLVM cache (Windows)
-        id: cache-llvm-restore-windows
-        if: runner.os == 'Windows'
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.LLVM_INSTALL_PATH_WINDOWS }}
-          key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
 
       # -------------------------------
       # Build LLVM if cache missed
       # -------------------------------
       - name: Build LLVM (Linux/macOS)
-        if: steps.cache-llvm-restore-unix.outputs.cache-hit != 'true' && runner.os != 'Windows'
+        if: steps.cache-llvm-restore-unix.outputs.cache-hit != 'true' 
         shell: bash
         run: |
           git clone --depth 1 --branch ${{ env.LLVM_BRANCH }} https://github.com/llvm/llvm-project.git
@@ -83,47 +71,23 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD="X86;AArch64"
           ninja -C build install
 
-      - name: Build LLVM (Windows)
-        if: steps.cache-llvm-restore-windows.outputs.cache-hit != 'true' && runner.os == 'Windows'
-        shell: bash
-        run: |
-          git clone --depth 1 --branch ${{ env.LLVM_BRANCH }} https://github.com/llvm/llvm-project.git
-          cd llvm-project
-          cmake -S llvm -B build -G Ninja \
-            -DCMAKE_INSTALL_PREFIX=${{ env.LLVM_INSTALL_PATH_WINDOWS }} \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_ENABLE_PROJECTS="clang;lld" \
-            -DLLVM_TARGETS_TO_BUILD="X86;AArch64"
-          ninja -C build install
 
       # -------------------------------
       # Ensure cache path exists (important for saving even if build fails)
       # -------------------------------
       - name: Ensure LLVM cache path exists (Linux/macOS)
-        if: always() && runner.os != 'Windows'
+        if: always() 
         run: mkdir -p ${{ env.LLVM_INSTALL_PATH_UNIX }}
         shell: bash
-
-      - name: Ensure LLVM cache path exists (Windows)
-        if: always() && runner.os == 'Windows'
-        shell: pwsh
-        run: New-Item -ItemType Directory -Force -Path $env:LLVM_INSTALL_PATH_WINDOWS
 
       # -------------------------------
       # Save LLVM cache always
       # -------------------------------
       - name: Save LLVM cache (Linux/macOS)
-        if: always() && runner.os != 'Windows'
+        if: always() 
         uses: actions/cache/save@v4
         with:
           path: ${{ env.LLVM_INSTALL_PATH_UNIX }}
-          key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
-
-      - name: Save LLVM cache (Windows)
-        if: always() && runner.os == 'Windows'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.LLVM_INSTALL_PATH_WINDOWS }}
           key: ${{ runner.os }}-${{ runner.arch }}-llvm-${{ env.LLVM_BRANCH }}
 
       # -------------------------------
@@ -139,14 +103,9 @@ jobs:
       # Add LLVM to PATH
       # -------------------------------
       - name: Add LLVM to path (Linux/macOS)
-        if: runner.os != 'Windows'
         shell: bash
         run: echo "${{ env.LLVM_INSTALL_PATH_UNIX }}/bin" >> $GITHUB_PATH
 
-      - name: Add LLVM to path (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: echo "${{ env.LLVM_INSTALL_PATH_WINDOWS }}\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       # -------------------------------
       # Build and test Rust project
