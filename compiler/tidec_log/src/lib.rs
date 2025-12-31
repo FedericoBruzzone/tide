@@ -248,18 +248,18 @@ mod tests {
         let file_writer = LogWriter::File("test.log".into());
 
         match stdout_writer {
-            LogWriter::Stdout => assert!(true),
-            _ => assert!(false, "Expected Stdout variant"),
+            LogWriter::Stdout => {}
+            _ => panic!("Expected Stdout variant"),
         }
 
         match stderr_writer {
-            LogWriter::Stderr => assert!(true),
-            _ => assert!(false, "Expected Stderr variant"),
+            LogWriter::Stderr => {}
+            _ => panic!("Expected Stderr variant"),
         }
 
         match file_writer {
             LogWriter::File(path) => assert_eq!(path.to_str().unwrap(), "test.log"),
-            _ => assert!(false, "Expected File variant"),
+            _ => panic!("Expected File variant"),
         }
     }
 
@@ -354,13 +354,13 @@ mod tests {
 
         // Just basic tests to ensure the enum works
         match yes {
-            FallbackDefaultEnv::Yes => assert!(true),
-            FallbackDefaultEnv::No => assert!(false),
+            FallbackDefaultEnv::No => panic!("Expected Yes variant"),
+            FallbackDefaultEnv::Yes => {}
         }
 
         match no {
-            FallbackDefaultEnv::No => assert!(true),
-            FallbackDefaultEnv::Yes => assert!(false),
+            FallbackDefaultEnv::Yes => panic!("Expected No variant"),
+            FallbackDefaultEnv::No => {}
         }
     }
 
@@ -389,7 +389,6 @@ mod tests {
     fn test_logger_struct_exists() {
         // Just verify the Logger struct can be referenced
         let _logger_type = std::marker::PhantomData::<Logger>;
-        assert!(true);
     }
 
     #[test]
@@ -400,6 +399,5 @@ mod tests {
         // This test just verifies the function compiles, demonstrating Send + Sync bounds
         // Commented out as LogWriter contains PathBuf which should be Send + Sync
         // assert_send_sync::<LoggerConfig>();
-        assert!(true);
     }
 }
