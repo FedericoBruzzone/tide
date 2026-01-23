@@ -23,7 +23,7 @@ fn main() {
 
     let target = TirTarget::new(BackendKind::Llvm);
     let arguments = TirArgs {
-        emit_kind: EmitKind::LlvmIr,
+        emit_kind: EmitKind::LlvmBitcode,
     };
     let tir_arena = TirArena::default();
     let intern_ctx = InternCtx::new(&tir_arena);

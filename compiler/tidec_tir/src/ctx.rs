@@ -19,7 +19,9 @@ use tidec_utils::interner::{Interned, Interner};
 pub enum EmitKind {
     Assembly,
     Object,
+    Executable,
     LlvmIr,
+    LlvmBitcode,
 }
 
 #[derive(Debug, Clone, Copy)]
