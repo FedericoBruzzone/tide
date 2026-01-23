@@ -216,6 +216,140 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
 
         fn_ty
     }
+
+    /// Creates a target machine for code generation.
+    ///
+    /// Initializes all LLVM targets and creates a target machine based on
+    /// the module's target triple, host CPU, and CPU features.
+    fn create_target_machine(&self) -> TargetMachine {
+        Target::initialize_all(&InitializationConfig::default());
+        let triple = self.ll_module.get_triple();
+        let features = TargetMachine::get_host_cpu_features().to_string();
+        let cpu = TargetMachine::get_host_cpu_name().to_string();
+        let target = Target::from_triple(&triple).expect("Failed to get target from triple");
+        target
+            .create_target_machine(
+                &triple,
+                &cpu,
+                &features,
+                OptimizationLevel::Default,
+                RelocMode::Default,
+                CodeModel::Default,
+            )
+            .expect("Failed to create target machine")
+    }
+
+    /// Returns the module name as a string.
+    fn module_name(&self) -> &str {
+        self.ll_module.get_name().to_str().unwrap()
+    }
+
+    /// Emits an object file (`.o`) from the LLVM module.
+    fn emit_object(&self) {
+        self.emit_object_to_path(&format!("{}.o", self.module_name()));
+    }
+
+    /// Emits an object file to the specified path.
+    ///
+    /// This is a helper function used by both `emit_object` and `emit_executable`.
+    fn emit_object_to_path(&self, obj_path: &str) {
+        let target_machine = self.create_target_machine();
+        target_machine
+            .write_to_file(&self.ll_module, FileType::Object, Path::new(obj_path))
+            .expect("Failed to write object file");
+        debug!("Wrote object file to {}", obj_path);
+    }
+
+    /// Emits an assembly file (`.s`) from the LLVM module.
+    fn emit_assembly(&self) {
+        let target_machine = self.create_target_machine();
+        let asm_path = format!("{}.s", self.module_name());
+        target_machine
+            .write_to_file(&self.ll_module, FileType::Assembly, Path::new(&asm_path))
+            .expect("Failed to write assembly file");
+        debug!("Wrote assembly file to {}", asm_path);
+    }
+
+    /// Emits an LLVM IR file (`.ll`) from the LLVM module.
+    fn emit_llvm_ir(&self) {
+        let ir_path = format!("{}.ll", self.module_name());
+        std::fs::write(&ir_path, self.ll_module.print_to_string().to_string())
+            .expect("Failed to write LLVM IR file");
+        debug!("Wrote LLVM IR file to {}", ir_path);
+    }
+
+    /// Emits an LLVM bitcode file (`.bc`) from the LLVM module.
+    fn emit_llvm_bitcode(&self) {
+        let bc_path = format!("{}.bc", self.module_name());
+        if !self.ll_module.write_bitcode_to_path(&bc_path) {
+            panic!("Failed to write LLVM bitcode file");
+        }
+        debug!("Wrote LLVM bitcode file to {}", bc_path);
+    }
+
+    /// Emits an executable by first generating an object file and then linking it.
+    ///
+    /// The linker is determined at compile time based on the host OS:
+    /// - Windows: `link.exe`
+    /// - macOS/Linux: `cc`
+    fn emit_executable(&self) {
+        let module_name = self.module_name();
+        let obj_path = format!("{}.o", module_name);
+
+        #[cfg(target_os = "windows")]
+        let exe_path = format!("{}.exe", module_name);
+        #[cfg(not(target_os = "windows"))]
+        let exe_path = module_name.to_string();
+
+        // First, generate the object file
+        self.emit_object_to_path(&obj_path);
+        debug!("Wrote intermediate object file to {}", obj_path);
+
+        // Link the object file into an executable
+        self.link_object_to_executable(&obj_path, &exe_path);
+
+        // Clean up the intermediate object file
+        if let Err(e) = std::fs::remove_file(&obj_path) {
+            debug!("Warning: failed to remove intermediate object file: {}", e);
+        }
+    }
+
+    /// Links an object file into an executable.
+    ///
+    /// The linker command is determined at compile time based on the host OS.
+    fn link_object_to_executable(&self, obj_path: &str, exe_path: &str) {
+        #[cfg(target_os = "windows")]
+        let mut linker_cmd = {
+            let mut cmd = Command::new("link.exe");
+            cmd.arg(format!("/OUT:{}", exe_path)).arg(obj_path);
+            cmd
+        };
+
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let mut linker_cmd = {
+            let mut cmd = Command::new("cc");
+            cmd.arg("-o").arg(exe_path).arg(obj_path);
+            cmd
+        };
+
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+        let mut linker_cmd = {
+            // Fallback for other Unix-like systems
+            let mut cmd = Command::new("cc");
+            cmd.arg("-o").arg(exe_path).arg(obj_path);
+            cmd
+        };
+
+        // Invoke the linker
+        let output = linker_cmd.output().expect("Failed to execute linker");
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            panic!("Linker failed: {}", stderr);
+        }
+
+        debug!("Linked executable to {}", exe_path);
+    }
 }
 
 impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
