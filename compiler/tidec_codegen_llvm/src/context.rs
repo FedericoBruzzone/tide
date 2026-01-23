@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
+use std::process::Command;
 
 use inkwell::basic_block::BasicBlock;
 use inkwell::context::Context;
@@ -384,47 +385,12 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
     fn emit_output(&self) {
         assert_ne!(self.ll_module.get_triple(), TargetTriple::create(""));
 
-        let target_machine = || {
-            Target::initialize_all(&InitializationConfig::default());
-            let triple = self.ll_module.get_triple();
-            let features = TargetMachine::get_host_cpu_features().to_string();
-            let cpu = TargetMachine::get_host_cpu_name().to_string();
-            let target = Target::from_triple(&triple).expect("Failed to get target from triple");
-            target
-                .create_target_machine(
-                    &triple,
-                    &cpu,
-                    &features,
-                    OptimizationLevel::Default,
-                    RelocMode::Default,
-                    CodeModel::Default,
-                )
-                .expect("Failed to create target machine")
-        };
-
         match self.tir_ctx().emit_kind() {
-            EmitKind::Object => {
-                let target_machine = target_machine();
-                let obj_path = format!("{}.o", self.ll_module.get_name().to_str().unwrap());
-                target_machine
-                    .write_to_file(&self.ll_module, FileType::Object, Path::new(&obj_path))
-                    .expect("Failed to write object file");
-                debug!("Wrote object file to {}", obj_path);
-            }
-            EmitKind::Assembly => {
-                let target_machine = target_machine();
-                let asm_path = format!("{}.s", self.ll_module.get_name().to_str().unwrap());
-                target_machine
-                    .write_to_file(&self.ll_module, FileType::Assembly, Path::new(&asm_path))
-                    .expect("Failed to write assembly file");
-                debug!("Wrote assembly file to {}", asm_path);
-            }
-            EmitKind::LlvmIr => {
-                let ir_path = format!("{}.ll", self.ll_module.get_name().to_str().unwrap());
-                std::fs::write(&ir_path, self.ll_module.print_to_string().to_string())
-                    .expect("Failed to write LLVM IR file");
-                debug!("Wrote LLVM IR file to {}", ir_path);
-            }
+            EmitKind::Object => self.emit_object(),
+            EmitKind::Assembly => self.emit_assembly(),
+            EmitKind::LlvmIr => self.emit_llvm_ir(),
+            EmitKind::LlvmBitcode => self.emit_llvm_bitcode(),
+            EmitKind::Executable => self.emit_executable(),
         }
     }
 
