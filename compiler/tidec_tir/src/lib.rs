@@ -9,6 +9,18 @@ use crate::ctx::TirCtx;
 use std::ops::Deref;
 use tidec_utils::interner::{Interned, Ty};
 
+/// An interned allocation, similar to how `TirTy` and `Layout` are handled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TirAllocation<'ctx>(pub Interned<'ctx, crate::alloc::Allocation>);
+
+impl<'ctx> Deref for TirAllocation<'ctx> {
+    type Target = Interned<'ctx, crate::alloc::Allocation>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 pub struct TirTy<'ctx>(pub Interned<'ctx, crate::ty::TirTy<TirCtx<'ctx>>>);
 impl<'ctx> Ty<TirCtx<'ctx>> for TirTy<'ctx> {}
 

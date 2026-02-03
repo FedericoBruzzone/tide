@@ -1,4 +1,3 @@
-use crate::alloc::GlobalAllocMap;
 use crate::syntax::{BasicBlock, BasicBlockData, Local, LocalData};
 use tidec_utils::{idx::Idx, index_vec::IdxVec};
 
@@ -276,9 +275,6 @@ pub struct TirUnit<'ctx> {
 
     /// The functions in the unit.
     pub bodies: IdxVec<Body, TirBody<'ctx>>,
-
-    /// Global allocations for constants (strings, function references, etc.).
-    pub alloc_map: GlobalAllocMap,
 }
 
 impl Idx for Body {

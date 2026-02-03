@@ -4,7 +4,7 @@ use std::num::NonZero;
 use tidec_abi::size_and_align::Size;
 use tidec_abi::target::{BackendKind, TirTarget};
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
-use tidec_tir::alloc::{Allocation, GlobalAlloc, GlobalAllocMap};
+
 use tidec_tir::body::{
     CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirItemKind, TirUnit,
     TirUnitMetadata, UnnamedAddress, Visibility,
@@ -36,9 +36,6 @@ fn example_printf<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
     let i8_ty = tir_ctx.intern_ty(TirTy::<TirCtx>::I8);
     let ptr_i8_ty = tir_ctx.intern_ty(TirTy::RawPtr(i8_ty, Mutability::Imm));
     let i32_ty = tir_ctx.intern_ty(TirTy::<TirCtx>::I32);
-
-    // Create the global allocation map for constants
-    let mut alloc_map = GlobalAllocMap::new();
 
     // Declare printf as an external function
     // int printf(const char* format, ...)
@@ -74,12 +71,11 @@ fn example_printf<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
         basic_blocks: IdxVec::new(), // No basic blocks for external declaration
     };
 
-    // Register printf as a function allocation
-    let printf_alloc_id = alloc_map.insert(GlobalAlloc::Function(printf_def_id));
+    // Register printf as a function allocation using TirCtx
+    let printf_alloc_id = tir_ctx.intern_fn(printf_def_id);
 
-    // Register the format string as a memory allocation
-    let format_string = "Hello, World! %d\n";
-    let format_alloc_id = alloc_map.insert_memory(Allocation::from_c_str(format_string));
+    // Register the format string as a memory allocation using TirCtx
+    let format_alloc_id = tir_ctx.intern_c_str("Hello, World! %d\n");
 
     // Create the main function that calls printf
     let main_metadata = TirBodyMetadata {
@@ -183,7 +179,6 @@ fn example_printf<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
     TirUnit {
         metadata: unit_metadata,
         bodies: IdxVec::from_raw(vec![printf_body, main_body]),
-        alloc_map,
     }
 }
 
@@ -302,7 +297,6 @@ fn example1<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
     let lir_unit: TirUnit = TirUnit {
         metadata: lit_unit_metadata,
         bodies: lir_bodies,
-        alloc_map: GlobalAllocMap::new(),
     };
 
     lir_unit

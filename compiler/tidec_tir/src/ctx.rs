@@ -1,13 +1,18 @@
 use std::{
     borrow::Borrow,
     cell::{Cell, RefCell},
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     hash::Hash,
     ops::Deref,
     ptr::NonNull,
 };
 
-use crate::{layout_ctx::LayoutCtx, ty, TirTy};
+use crate::{
+    alloc::{AllocId, Allocation, GlobalAlloc},
+    body::DefId,
+    layout_ctx::LayoutCtx,
+    ty, TirAllocation, TirTy,
+};
 use tidec_abi::{
     layout::{self, TyAndLayout},
     target::{BackendKind, TirTarget},
@@ -29,13 +34,46 @@ pub struct TirArgs {
     pub emit_kind: EmitKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 /// A pointer to a value allocated in an arena.
 ///
 /// This is a thin wrapper around a reference to a value allocated in an arena.
 /// It is used to indicate that the value is allocated in an arena, and should
 /// not be deallocated manually.
+///
+/// `Eq` and `Hash` are implemented to compare by the underlying value, not pointer address.
+/// This is required for proper deduplication in `InternedSet`.
+///
+/// Note: `ArenaPrt` is always `Copy` since it just holds a reference (`&'ctx T` is Copy).
+/// We manually implement `Clone` and `Copy` to avoid the derive macro adding a `T: Copy` bound.
 pub struct ArenaPrt<'ctx, T: Sized>(&'ctx T);
+
+// Manually implement Clone without requiring T: Clone
+impl<T> Clone for ArenaPrt<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+// Manually implement Copy without requiring T: Copy
+// This is safe because &'ctx T is always Copy
+impl<T> Copy for ArenaPrt<'_, T> {}
+
+// Implement PartialEq by comparing the underlying values.
+impl<T: PartialEq> PartialEq for ArenaPrt<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T: Eq> Eq for ArenaPrt<'_, T> {}
+
+// Implement Hash by hashing the underlying value.
+impl<T: Hash> Hash for ArenaPrt<'_, T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
 
 // Allow borrowing the underlying value so InternedSet<T> can accept an R = underlying type.
 impl<'ctx, T> Borrow<T> for ArenaPrt<'ctx, T> {
@@ -148,13 +186,20 @@ impl<'ctx> Default for TirArena<'ctx> {
 /// internal mutability is required.
 pub struct InternedSet<T: Sized + Eq + std::hash::Hash>(RefCell<HashSet<T>>);
 
-impl<T: Sized + Clone + Copy + Eq + std::hash::Hash> Default for InternedSet<T> {
-    fn default() -> Self {
+impl<T: Sized + Eq + std::hash::Hash> InternedSet<T> {
+    /// Create a new empty interned set.
+    pub fn new() -> Self {
         Self(RefCell::new(HashSet::new()))
     }
 }
 
-impl<T: Sized + Clone + Copy + Eq + std::hash::Hash> InternedSet<T> {
+impl<T: Sized + Eq + std::hash::Hash> Default for InternedSet<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: Sized + Copy + Eq + std::hash::Hash> InternedSet<T> {
     pub fn intern<R>(&self, value: R, intern_in_arena: impl FnOnce(R) -> T) -> T
     where
         T: Borrow<R>,
@@ -180,7 +225,7 @@ impl<T: Sized + Clone + Copy + Eq + std::hash::Hash> InternedSet<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 /// The context for all interned entities in TIR.
 ///
 /// It contains an arena for interning all TIR types and layouts, as well as
@@ -197,6 +242,62 @@ pub struct InternCtx<'ctx> {
     types: InternedSet<ArenaPrt<'ctx, ty::TirTy<TirCtx<'ctx>>>>,
     /// A set of all interned layouts.
     layouts: InternedSet<ArenaPrt<'ctx, layout::Layout>>,
+    /// A set of all interned allocations (for deduplication of identical allocations).
+    allocations: InternedSet<ArenaPrt<'ctx, Allocation>>,
+    /// Global allocation map for tracking allocations by ID.
+    /// This maps AllocId to GlobalAlloc for lookup during codegen.
+    alloc_map: GlobalAllocMap<'ctx>,
+}
+
+#[derive(Debug, Default)]
+/// A map from allocation IDs to global allocations.
+///
+/// This is separate from `InternCtx` because it's not about deduplication/interning,
+/// but about tracking allocations by their unique ID for codegen lookup.
+pub struct GlobalAllocMap<'ctx> {
+    /// Map from AllocId to GlobalAlloc for lookup during codegen.
+    /// Uses RefCell for interior mutability.
+    alloc_id_map: RefCell<HashMap<AllocId, GlobalAlloc<'ctx>>>,
+}
+
+impl<'ctx> GlobalAllocMap<'ctx> {
+    /// Create a new empty allocation map.
+    pub fn new() -> Self {
+        Self {
+            alloc_id_map: RefCell::new(HashMap::new()),
+        }
+    }
+
+    /// Insert a global allocation and return its AllocId.
+    pub fn insert(&self, alloc: GlobalAlloc<'ctx>) -> AllocId {
+        let id = AllocId::new();
+        self.alloc_id_map.borrow_mut().insert(id, alloc);
+        id
+    }
+
+    /// Get a global allocation by its ID.
+    pub fn get(&self, id: AllocId) -> Option<GlobalAlloc<'ctx>> {
+        self.alloc_id_map.borrow().get(&id).copied()
+    }
+
+    /// Get a global allocation by its ID, panicking if not found.
+    pub fn get_unwrap(&self, id: AllocId) -> GlobalAlloc<'ctx> {
+        self.alloc_id_map
+            .borrow()
+            .get(&id)
+            .copied()
+            .unwrap_or_else(|| panic!("unknown allocation ID: {:?}", id))
+    }
+
+    /// Iterate over all global allocations.
+    /// Returns a Vec to avoid holding the RefCell borrow.
+    pub fn iter(&self) -> Vec<(AllocId, GlobalAlloc<'ctx>)> {
+        self.alloc_id_map
+            .borrow()
+            .iter()
+            .map(|(k, v)| (*k, *v))
+            .collect()
+    }
 }
 
 impl<'ctx> InternCtx<'ctx> {
@@ -205,7 +306,24 @@ impl<'ctx> InternCtx<'ctx> {
             arena,
             types: Default::default(),
             layouts: Default::default(),
+            allocations: Default::default(),
+            alloc_map: GlobalAllocMap::new(),
         }
+    }
+
+    /// Intern an allocation, returning an interned `TirAllocation`.
+    /// If an identical allocation already exists, returns the existing one.
+    pub fn intern_allocation(&self, alloc: Allocation) -> TirAllocation<'ctx> {
+        let interned_ref = self
+            .allocations
+            .intern(alloc, |alloc| ArenaPrt(self.arena.alloc(alloc)))
+            .0;
+        TirAllocation(tidec_utils::interner::Interned::new(interned_ref))
+    }
+
+    /// Get a reference to the global allocation map.
+    pub fn alloc_map(&self) -> &GlobalAllocMap<'ctx> {
+        &self.alloc_map
     }
 }
 
@@ -213,6 +331,7 @@ impl<'ctx> InternCtx<'ctx> {
 /// The main context for TIR compilation.
 ///
 /// It holds references to the target, arguments, and intern context.
+/// The global allocation map is accessed through the intern context.
 /// It provides methods for computing layouts, interning types and layouts,
 /// and accessing target-specific information.
 pub struct TirCtx<'ctx> {
@@ -274,8 +393,120 @@ impl<'ctx> TirCtx<'ctx> {
                 .0,
         ))
     }
+
+    // ===== Allocation interning =====
+
+    /// Intern an allocation in the arena and return an interned `TirAllocation`.
+    /// Identical allocations are deduplicated.
+    pub fn intern_alloc(&self, alloc: Allocation) -> TirAllocation<'ctx> {
+        self.intern_ctx.intern_allocation(alloc)
+    }
+
+    /// Intern a C-string (null-terminated) and register it as a memory allocation.
+    /// Returns the `AllocId` for the string.
+    /// Identical strings are deduplicated.
+    pub fn intern_c_str(&self, s: &str) -> AllocId {
+        let alloc = Allocation::from_c_str(s);
+        let interned = self.intern_alloc(alloc);
+        self.intern_ctx
+            .alloc_map()
+            .insert(GlobalAlloc::Memory(interned))
+    }
+
+    /// Intern raw bytes and register them as a memory allocation.
+    /// Returns the `AllocId` for the bytes.
+    /// Identical byte sequences are deduplicated.
+    pub fn intern_bytes(&self, bytes: &[u8]) -> AllocId {
+        let alloc = Allocation::from_bytes(bytes);
+        let interned = self.intern_alloc(alloc);
+        self.intern_ctx
+            .alloc_map()
+            .insert(GlobalAlloc::Memory(interned))
+    }
+
+    /// Register a function as a global allocation.
+    /// Returns the `AllocId` for the function reference.
+    pub fn intern_fn(&self, def_id: DefId) -> AllocId {
+        self.intern_ctx
+            .alloc_map()
+            .insert(GlobalAlloc::Function(def_id))
+    }
+
+    /// Register a global allocation directly.
+    /// Returns the `AllocId` for the allocation.
+    pub fn insert_alloc(&self, alloc: GlobalAlloc<'ctx>) -> AllocId {
+        self.intern_ctx.alloc_map().insert(alloc)
+    }
+
+    /// Get a global allocation by its ID.
+    pub fn get_global_alloc(&self, id: AllocId) -> Option<GlobalAlloc<'ctx>> {
+        self.intern_ctx.alloc_map().get(id)
+    }
+
+    /// Get a global allocation by its ID, panicking if not found.
+    pub fn get_global_alloc_unwrap(&self, id: AllocId) -> GlobalAlloc<'ctx> {
+        self.intern_ctx.alloc_map().get_unwrap(id)
+    }
+
+    /// Iterate over all global allocations.
+    pub fn iter_global_allocs(&self) -> Vec<(AllocId, GlobalAlloc<'ctx>)> {
+        self.intern_ctx.alloc_map().iter()
+    }
 }
 
 impl<'ctx> Interner for TirCtx<'ctx> {
     type Ty = TirTy<'ctx>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::alloc::Allocation;
+
+    #[test]
+    fn test_allocation_interning_deduplication() {
+        let arena = TirArena::default();
+        let intern_ctx = InternCtx::new(&arena);
+
+        // Intern the same string twice
+        let alloc1 = Allocation::from_c_str("hello");
+        let alloc2 = Allocation::from_c_str("hello");
+
+        let interned1 = intern_ctx.intern_allocation(alloc1);
+        let interned2 = intern_ctx.intern_allocation(alloc2);
+
+        // They should be equal (deduplicated via Interned)
+        assert_eq!(interned1, interned2);
+    }
+
+    #[test]
+    fn test_different_allocations_not_deduplicated() {
+        let arena = TirArena::default();
+        let intern_ctx = InternCtx::new(&arena);
+
+        let alloc1 = Allocation::from_c_str("hello");
+        let alloc2 = Allocation::from_c_str("world");
+
+        let interned1 = intern_ctx.intern_allocation(alloc1);
+        let interned2 = intern_ctx.intern_allocation(alloc2);
+
+        // They should be different (not deduplicated)
+        assert_ne!(interned1, interned2);
+    }
+
+    #[test]
+    fn test_global_alloc_map() {
+        use crate::alloc::GlobalAlloc;
+        use crate::body::DefId;
+
+        let alloc_map = GlobalAllocMap::new();
+
+        // Insert a function allocation
+        let def_id = DefId(42);
+        let alloc_id = alloc_map.insert(GlobalAlloc::Function(def_id));
+
+        // Retrieve it
+        let retrieved = alloc_map.get_unwrap(alloc_id);
+        assert!(matches!(retrieved, GlobalAlloc::Function(id) if id == def_id));
+    }
 }

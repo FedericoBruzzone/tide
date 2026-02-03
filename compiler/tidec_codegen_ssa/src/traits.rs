@@ -113,8 +113,7 @@ pub trait CodegenMethods<'ctx>:
     fn get_fn_by_name(&self, name: &str) -> Option<Self::FunctionValue>;
 
     /// Get a global allocation by its ID.
-    /// Returns a cloned copy to avoid borrow checker issues with RefCell.
-    fn global_alloc(&self, alloc_id: AllocId) -> GlobalAlloc;
+    fn global_alloc(&self, alloc_id: AllocId) -> GlobalAlloc<'ctx>;
 
     /// Create a global constant from an allocation and return a pointer to it.
     fn const_alloc_to_value(&self, alloc: &Allocation) -> Self::Value;
