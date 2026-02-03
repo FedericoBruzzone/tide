@@ -93,10 +93,52 @@ impl<'be, 'ctx, V: std::fmt::Debug> OperandRef<'ctx, V> {
                 assert!(ty_layout.is_zst());
                 OperandVal::Zst
             }
+            ConstValue::Indirect { alloc_id, offset } => {
+                return Self::from_const_alloc(builder, ty_layout, alloc_id, offset);
+            }
         };
         OperandRef {
             operand_val: be_val,
             ty_layout,
+        }
+    }
+
+    /// Create an operand reference from a constant allocation.
+    ///
+    /// This handles the `ConstValue::Indirect` case, where the value is stored
+    /// in a global allocation and we need to create a pointer to it.
+    pub(crate) fn from_const_alloc<B: BuilderMethods<'be, 'ctx, Value = V>>(
+        builder: &mut B,
+        ty_layout: TyAndLayout<'ctx, TirTy<'ctx>>,
+        alloc_id: tidec_tir::alloc::AllocId,
+        _offset: tidec_abi::size_and_align::Size,
+    ) -> Self {
+        use tidec_tir::alloc::GlobalAlloc;
+
+        let global_alloc = builder.ctx().global_alloc(alloc_id);
+
+        match &global_alloc {
+            GlobalAlloc::Memory(alloc) => {
+                // Create a global constant from the allocation bytes
+                let ptr_val = builder.const_data_from_alloc(alloc);
+                OperandRef {
+                    operand_val: OperandVal::Immediate(ptr_val),
+                    ty_layout,
+                }
+            }
+            GlobalAlloc::Function(_def_id) => {
+                // For function references, we get the function value directly
+                let fn_val = builder.ctx().get_fn_from_alloc(alloc_id);
+                // Convert function to a pointer value
+                let ptr_val = builder.fn_to_ptr(fn_val);
+                OperandRef {
+                    operand_val: OperandVal::Immediate(ptr_val),
+                    ty_layout,
+                }
+            }
+            GlobalAlloc::Static(_def_id) => {
+                todo!("Handle static allocations")
+            }
         }
     }
 }

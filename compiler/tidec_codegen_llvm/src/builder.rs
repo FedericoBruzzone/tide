@@ -2,12 +2,13 @@ use std::ops::Deref;
 
 use crate::context::CodegenCtx;
 use crate::tir::tir_ty::BasicTypesUtils;
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue};
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, ValueKind};
 use inkwell::{basic_block::BasicBlock, builder::Builder};
 use tidec_abi::layout::{BackendRepr, Primitive, TyAndLayout};
 use tidec_abi::size_and_align::{Align, Size};
 use tidec_codegen_ssa::tir::{OperandRef, PlaceRef};
 use tidec_codegen_ssa::traits::{BuilderMethods, CodegenBackendTypes};
+use tidec_tir::alloc::Allocation;
 use tidec_tir::syntax::ConstScalar;
 use tidec_tir::TirTy;
 use tracing::instrument;
@@ -272,7 +273,7 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
     impl_arithmetic_ops!(float, build_fdiv, build_float_div, "fdiv",
         "Floating-point division.\n\n`build_float_div` is a helper on an LLVM IR builder wrapper that generates a floating-point division instruction.");
 
-    impl_arithmetic_ops!(int_overflow, build_sadd_unchecked, build_int_nsw_add, "sadd", 
+    impl_arithmetic_ops!(int_overflow, build_sadd_unchecked, build_int_nsw_add, "sadd",
         "Signed addition with UB on overflow.\n\n`build_int_nsw_add` is a helper on an LLVM IR builder wrapper that generates a signed integer addition instruction with the nsw flag, ensuring the operation is UB (undefined behavior) if signed overflow occurs.");
     impl_arithmetic_ops!(int_overflow, build_uadd_unchecked, build_int_nuw_add, "uadd",
         "Unsigned addition with UB on overflow.\n\n`build_int_nuw_add` is a helper on an LLVM IR builder wrapper that generates an unsigned integer addition instruction with the nuw flag, ensuring the operation is UB (undefined behavior) if unsigned overflow occurs.");
@@ -324,5 +325,62 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
                 }
             }
         }
+    }
+
+    fn const_data_from_alloc(&mut self, alloc: &Allocation) -> Self::Value {
+        // Create a global constant from the allocation bytes
+        let bytes = alloc.bytes();
+        let i8_type = self.ctx.ll_context.i8_type();
+        let array_type = i8_type.array_type(bytes.len() as u32);
+
+        // Create constant values for each byte
+        let byte_values: Vec<_> = bytes
+            .iter()
+            .map(|&b| i8_type.const_int(b as u64, false))
+            .collect();
+        let const_array = i8_type.const_array(&byte_values);
+
+        // Create a global variable with the constant array
+        let global = self
+            .ctx
+            .ll_module
+            .add_global(array_type, None, "const_data");
+        global.set_initializer(&const_array);
+        global.set_constant(true);
+        global.set_linkage(inkwell::module::Linkage::Private);
+        global.set_unnamed_addr(true);
+
+        // Return a pointer to the global
+        global.as_pointer_value().into()
+    }
+
+    fn build_call(
+        &mut self,
+        fn_value: Self::FunctionValue,
+        args: &[Self::MetadataValue],
+        name: &str,
+    ) -> Option<Self::Value> {
+        let call_site = self
+            .ll_builder
+            .build_call(fn_value, args, name)
+            .expect("Failed to build call instruction");
+
+        // Try to get the return value. If the function returns void, this will be None.
+        // inkwell returns a ValueKind enum with Basic/Instruction variants
+        match call_site.try_as_basic_value() {
+            ValueKind::Basic(val) => Some(val),
+            ValueKind::Instruction(_) => None,
+        }
+    }
+
+    fn build_unconditional_br(&mut self, target: Self::BasicBlock) {
+        self.ll_builder
+            .build_unconditional_branch(target)
+            .expect("Failed to build unconditional branch");
+    }
+
+    fn fn_to_ptr(&mut self, fn_value: Self::FunctionValue) -> Self::Value {
+        // In LLVM's opaque pointer model, function values can be used directly as pointers
+        fn_value.as_global_value().as_pointer_value().into()
     }
 }

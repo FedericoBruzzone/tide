@@ -1,20 +1,191 @@
 use std::num::NonZero;
 // #[macro_use] extern crate tidec_utils;
 //
+use tidec_abi::size_and_align::Size;
 use tidec_abi::target::{BackendKind, TirTarget};
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
+use tidec_tir::alloc::{Allocation, GlobalAlloc, GlobalAllocMap};
 use tidec_tir::body::{
     CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirItemKind, TirUnit,
     TirUnitMetadata, UnnamedAddress, Visibility,
 };
 use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
 use tidec_tir::syntax::{
-    BasicBlockData, ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue,
-    RawScalarValue, Statement, Terminator, UnaryOp, RETURN_LOCAL,
+    BasicBlock, BasicBlockData, ConstOperand, ConstScalar, ConstValue, Local, LocalData, Operand,
+    Place, RValue, RawScalarValue, Statement, Terminator, UnaryOp, RETURN_LOCAL,
 };
-use tidec_tir::ty::TirTy;
+use tidec_tir::ty::{Mutability, TirTy};
+use tidec_utils::idx::Idx;
 use tidec_utils::index_vec::IdxVec;
 use tracing::debug;
+
+/// Example with printf that prints "Hello, World! 42\n" and returns 0.
+/// ```c
+/// #include <stdio.h>
+/// int main() {
+///     printf("Hello, World! %d\n", 42);
+///     return 0;
+/// }
+/// ```
+///
+/// TIDEC_LOG=debug cargo run; \
+///   ld main.o -o a.out -lSystem -syslibroot `xcrun --show-sdk-path` \
+///   ./a.out; echo $?
+fn example_printf<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
+    // Intern the pointer type for i8 (for printf's char* parameter)
+    let i8_ty = tir_ctx.intern_ty(TirTy::<TirCtx>::I8);
+    let ptr_i8_ty = tir_ctx.intern_ty(TirTy::RawPtr(i8_ty, Mutability::Imm));
+    let i32_ty = tir_ctx.intern_ty(TirTy::<TirCtx>::I32);
+
+    // Create the global allocation map for constants
+    let mut alloc_map = GlobalAllocMap::new();
+
+    // Declare printf as an external function
+    // int printf(const char* format, ...)
+    let printf_def_id = DefId(0);
+    let printf_metadata = TirBodyMetadata {
+        def_id: printf_def_id,
+        name: "printf".to_string(),
+        kind: TirBodyKind::Item(TirItemKind::Function),
+        inlined: false,
+        linkage: Linkage::External,
+        visibility: Visibility::Default,
+        unnamed_address: UnnamedAddress::None,
+        call_conv: CallConv::C,
+        is_varargs: true,     // printf is variadic
+        is_declaration: true, // This is just a declaration, no body
+    };
+
+    let printf_body = TirBody {
+        metadata: printf_metadata,
+        ret_and_args: IdxVec::from_raw(vec![
+            // Return type: i32
+            LocalData {
+                ty: i32_ty,
+                mutable: false,
+            },
+            // First parameter: const char* (pointer to i8)
+            LocalData {
+                ty: ptr_i8_ty,
+                mutable: false,
+            },
+        ]),
+        locals: IdxVec::new(),
+        basic_blocks: IdxVec::new(), // No basic blocks for external declaration
+    };
+
+    // Register printf as a function allocation
+    let printf_alloc_id = alloc_map.insert(GlobalAlloc::Function(printf_def_id));
+
+    // Register the format string as a memory allocation
+    let format_string = "Hello, World! %d\n";
+    let format_alloc_id = alloc_map.insert_memory(Allocation::from_c_str(format_string));
+
+    // Create the main function that calls printf
+    let main_metadata = TirBodyMetadata {
+        def_id: DefId(1),
+        name: "main".to_string(),
+        kind: TirBodyKind::Item(TirItemKind::Function),
+        inlined: false,
+        linkage: Linkage::External,
+        visibility: Visibility::Default,
+        unnamed_address: UnnamedAddress::None,
+        call_conv: CallConv::C,
+        is_varargs: false,
+        is_declaration: false,
+    };
+
+    // Local 0: return value (i32)
+    // Local 1: result of printf call (i32) - we'll store this but not use it
+    let main_ret_and_args = IdxVec::from_raw(vec![LocalData {
+        ty: i32_ty,
+        mutable: false,
+    }]);
+
+    let main_locals = IdxVec::from_raw(vec![LocalData {
+        ty: i32_ty, // For storing printf return value
+        mutable: false,
+    }]);
+
+    // Basic block 0: entry - call printf and jump to bb1
+    // Basic block 1: set return value and return
+    let bb0 = BasicBlockData {
+        statements: vec![],
+        terminator: Terminator::Call {
+            // Function reference via Indirect allocation
+            func: Operand::Const(ConstOperand::Value(
+                ConstValue::Indirect {
+                    alloc_id: printf_alloc_id,
+                    offset: Size::ZERO,
+                },
+                ptr_i8_ty, // Function pointer type
+            )),
+            args: vec![
+                // Format string via Indirect allocation
+                Operand::Const(ConstOperand::Value(
+                    ConstValue::Indirect {
+                        alloc_id: format_alloc_id,
+                        offset: Size::ZERO,
+                    },
+                    ptr_i8_ty,
+                )),
+                // Integer argument: 42
+                Operand::Const(ConstOperand::Value(
+                    ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                        data: 42u128,
+                        size: NonZero::new(4).unwrap(),
+                    })),
+                    i32_ty,
+                )),
+            ],
+            destination: Place {
+                local: Local::new(1), // Store result in local 1 (first non-return local)
+                projection: vec![],
+            },
+            target: BasicBlock::new(1), // Continue to bb1
+        },
+    };
+
+    let bb1 = BasicBlockData {
+        statements: vec![
+            // Set return value to 0
+            Statement::Assign(Box::new((
+                Place {
+                    local: RETURN_LOCAL,
+                    projection: vec![],
+                },
+                RValue::UnaryOp(
+                    UnaryOp::Pos,
+                    Operand::Const(ConstOperand::Value(
+                        ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                            data: 0u128,
+                            size: NonZero::new(4).unwrap(),
+                        })),
+                        i32_ty,
+                    )),
+                ),
+            ))),
+        ],
+        terminator: Terminator::Return,
+    };
+
+    let main_body = TirBody {
+        metadata: main_metadata,
+        ret_and_args: main_ret_and_args,
+        locals: main_locals,
+        basic_blocks: IdxVec::from_raw(vec![bb0, bb1]),
+    };
+
+    let unit_metadata = TirUnitMetadata {
+        unit_name: "main".to_string(),
+    };
+
+    TirUnit {
+        metadata: unit_metadata,
+        bodies: IdxVec::from_raw(vec![printf_body, main_body]),
+        alloc_map,
+    }
+}
 
 // TIDEC_LOG=debug cargo run; cc main.o -o a.out; ./a.out; echo $?
 fn main() {
@@ -23,72 +194,18 @@ fn main() {
 
     let target = TirTarget::new(BackendKind::Llvm);
     let arguments = TirArgs {
-        emit_kind: EmitKind::LlvmBitcode,
+        emit_kind: EmitKind::Object,
     };
     let tir_arena = TirArena::default();
     let intern_ctx = InternCtx::new(&tir_arena);
 
-    // TODO: check valitiy of TideArgs
+    // TODO: check validity of TideArgs
     let tir_ctx = TirCtx::new(&target, &arguments, &intern_ctx);
 
-    // Create a simple main function that returns 0.
-    // ```c
-    // int main() {
-    //   return 0;
-    // }
-    // ```
-    let lir_body_metadata = TirBodyMetadata {
-        def_id: DefId(0),
-        name: "main".to_string(),
-        kind: TirBodyKind::Item(TirItemKind::Function),
-        inlined: false,
-        linkage: Linkage::External, // TODO(bruzzone): Check the correct linkage
-        visibility: Visibility::Default,
-        unnamed_address: UnnamedAddress::None,
-        call_conv: CallConv::C,
-    };
-    let lir_bodies = IdxVec::from_raw(vec![TirBody {
-        metadata: lir_body_metadata,
-        ret_and_args: IdxVec::from_raw(vec![LocalData {
-            // ty: TirTy::F32,
-            // ty: TirTy::I32,
-            ty: tir_ctx.intern_ty(TirTy::<TirCtx>::I32),
-            mutable: false,
-        }]),
-        locals: IdxVec::new(),
-        basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
-            statements: vec![Statement::Assign(Box::new((
-                Place {
-                    local: RETURN_LOCAL,
-                    projection: vec![],
-                },
-                RValue::UnaryOp(
-                    UnaryOp::Pos,
-                    Operand::Const(ConstOperand::Value(
-                        // ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
-                        //     data: 7.7f32.to_bits() as u128,
-                        //     size: NonZero::new(4).unwrap(), // 4 bytes for f32
-                        // })),
-                        // TirTy::F32,
-                        ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
-                            data: 10u128,
-                            size: NonZero::new(4).unwrap(), // 4 bytes for i32
-                        })),
-                        tir_ctx.intern_ty(TirTy::<TirCtx>::I32),
-                    )),
-                ),
-            )))],
-            terminator: Terminator::Return,
-        }]),
-    }]);
-    let lit_unit_metadata = TirUnitMetadata {
-        unit_name: "main".to_string(),
-    };
-
-    let lir_unit: TirUnit = TirUnit {
-        metadata: lit_unit_metadata,
-        bodies: lir_bodies,
-    };
+    // Use example_printf to demonstrate external function calls
+    let lir_unit = example_printf(&tir_ctx);
+    // Alternatively, use example1 for the simple case:
+    // let lir_unit = example1(&tir_ctx);
 
     codegen_lir_unit(tir_ctx, lir_unit);
 }
@@ -112,59 +229,81 @@ fn init_tidec_logger() {
     }
 }
 
-// TIDEC_LOG=debug cargo run; clang main.ll -o main; ./main; echo $?
-//
-// Create a simple main function that returns the value stored in the first place.
-// ```c
-// int main() {
-//    int _0 = 5; // The first place
-//    return _0;
-// }
-// ```
-// fn main2() {
-//     init_tidec_logger();
-//     debug!("Logging initialized");
-//
-//     let lir_ctx = TirTyCtx::new(BackendKind::Llvm);
-//
-//     let context = Context::create();
-//     let module = context.create_module("main");
-//     // let builder = context.create_builder();
-//     let code_gen_ctx = CodegenCtx::new(lir_ctx, &context, module);
-//     let codegen = CodegenBuilder::with_ctx(&code_gen_ctx);
-//
-//     let i32_type = codegen.ctx().ll_context.i32_type();
-//     let fn_type = i32_type.fn_type(&[], false);
-//     let function = codegen.ctx().ll_module.add_function("main", fn_type, None);
-//     let basic_block = codegen.ctx().ll_context.append_basic_block(function, "entry");
-//     // It is important to set the position at the end of the basic block, which in this case is the
-//     // start of the entry block.
-//     codegen.ll_builder.position_at_end(basic_block);
-//
-//     // Declare an integer variable
-//     let _0 = codegen.ll_builder.build_alloca(i32_type, "_0").unwrap();
-//     // Store the 5 in the first_place
-//     let i32_five = i32_type.const_int(5, false);
-//     let _ = codegen.ll_builder.build_store(_0, i32_five).unwrap();
-//
-//     // codegen.builder.build_return(Some(&i64_type.const_int(0, false))).unwrap(); // Reutrn 0
-//     // Dereference the _0 and return it
-//     let deref_0 = codegen.ll_builder.build_load(i32_type, _0, "_0").unwrap();
-//     codegen.ll_builder.build_return(Some(&deref_0)).unwrap();
-//
-//     codegen
-//         .ctx()
-//         .ll_module
-//         .print_to_file(Path::new("main.ll"))
-//         .unwrap();
-//     // module.print_to_stderr();
-//
-//     // =========================
-//     // ========= TESTS =========
-//     // =========================
-//
-//     let int_value = TirTy::I8.into_basic_type(codegen.ctx()).size_of().unwrap();
-//     let align = int_value.get_type().get_alignment();
-//     println!("Size of i8: {}", int_value);
-//     println!("Alignment of i8: {}", align);
-// }
+// Keep example1 available for testing simple case
+// TIDEC_LOG=debug cargo run; cc main.o -o a.out; ./a.out; echo $?
+#[allow(dead_code)]
+fn run_example1() {
+    init_tidec_logger();
+    debug!("Logging initialized");
+
+    let target = TirTarget::new(BackendKind::Llvm);
+    let arguments = TirArgs {
+        emit_kind: EmitKind::Object,
+    };
+    let tir_arena = TirArena::default();
+    let intern_ctx = InternCtx::new(&tir_arena);
+
+    let tir_ctx = TirCtx::new(&target, &arguments, &intern_ctx);
+    let lir_unit = example1(&tir_ctx);
+
+    codegen_lir_unit(tir_ctx, lir_unit);
+}
+
+fn example1<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
+    // Create a simple main function that returns 10.
+    // ```c
+    // int main() {
+    //   return 10;
+    // }
+    // ```
+    let lir_body_metadata = TirBodyMetadata {
+        def_id: DefId(0),
+        name: "main".to_string(),
+        kind: TirBodyKind::Item(TirItemKind::Function),
+        inlined: false,
+        linkage: Linkage::External,
+        visibility: Visibility::Default,
+        unnamed_address: UnnamedAddress::None,
+        call_conv: CallConv::C,
+        is_varargs: false,
+        is_declaration: false,
+    };
+    let lir_bodies = IdxVec::from_raw(vec![TirBody {
+        metadata: lir_body_metadata,
+        ret_and_args: IdxVec::from_raw(vec![LocalData {
+            ty: tir_ctx.intern_ty(TirTy::<TirCtx>::I32),
+            mutable: false,
+        }]),
+        locals: IdxVec::new(),
+        basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+            statements: vec![Statement::Assign(Box::new((
+                Place {
+                    local: RETURN_LOCAL,
+                    projection: vec![],
+                },
+                RValue::UnaryOp(
+                    UnaryOp::Pos,
+                    Operand::Const(ConstOperand::Value(
+                        ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                            data: 10u128,
+                            size: NonZero::new(4).unwrap(), // 4 bytes for i32
+                        })),
+                        tir_ctx.intern_ty(TirTy::<TirCtx>::I32),
+                    )),
+                ),
+            )))],
+            terminator: Terminator::Return,
+        }]),
+    }]);
+    let lit_unit_metadata = TirUnitMetadata {
+        unit_name: "main".to_string(),
+    };
+
+    let lir_unit: TirUnit = TirUnit {
+        metadata: lit_unit_metadata,
+        bodies: lir_bodies,
+        alloc_map: GlobalAllocMap::new(),
+    };
+
+    lir_unit
+}

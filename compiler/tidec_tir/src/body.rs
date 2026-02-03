@@ -1,7 +1,8 @@
+use crate::alloc::GlobalAllocMap;
 use crate::syntax::{BasicBlock, BasicBlockData, Local, LocalData};
 use tidec_utils::{idx::Idx, index_vec::IdxVec};
 
-#[derive(Eq, PartialEq, Hash, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub struct DefId(pub usize);
 
 #[derive(Clone, Copy)]
@@ -231,6 +232,11 @@ pub struct TirBodyMetadata {
     pub unnamed_address: UnnamedAddress,
     /// The calling convention of the function.
     pub call_conv: CallConv,
+    /// Whether the function is variadic (like printf).
+    pub is_varargs: bool,
+    /// Whether this is just a declaration (external function without body).
+    /// If true, no code will be generated for the body.
+    pub is_declaration: bool,
 }
 
 #[derive(Eq, PartialEq)]
@@ -270,6 +276,9 @@ pub struct TirUnit<'ctx> {
 
     /// The functions in the unit.
     pub bodies: IdxVec<Body, TirBody<'ctx>>,
+
+    /// Global allocations for constants (strings, function references, etc.).
+    pub alloc_map: GlobalAllocMap,
 }
 
 impl Idx for Body {

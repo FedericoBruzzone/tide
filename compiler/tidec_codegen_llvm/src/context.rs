@@ -17,6 +17,7 @@ use inkwell::OptimizationLevel;
 use tidec_abi::calling_convention::function::{ArgAbi, FnAbi, PassMode};
 use tidec_abi::layout::{BackendRepr, TyAndLayout};
 use tidec_codegen_ssa::tir;
+use tidec_tir::alloc::{AllocId, Allocation, GlobalAlloc, GlobalAllocMap};
 use tidec_tir::ctx::{EmitKind, TirCtx};
 use tidec_tir::TirTy;
 use tidec_utils::index_vec::IdxVec;
@@ -48,6 +49,9 @@ pub struct CodegenCtx<'ctx, 'll> {
     // TODO: Probably we could remove this and use only the module to find functions (more efficient?).
     // Something like: `self.ll_module.get_function(<name>)` (see `get_fn`).
     pub instances: RefCell<HashMap<DefId, AnyValueEnum<'ll>>>,
+    /// Global allocations for constants (strings, function references, etc.).
+    /// Uses RefCell for interior mutability since we need to access it through &self.
+    pub alloc_map: RefCell<GlobalAllocMap>,
 }
 
 impl<'ll, 'ctx> Deref for CodegenCtx<'ctx, 'll> {
@@ -86,7 +90,11 @@ impl<'ctx> PreDefineCodegenMethods<'ctx> for CodegenCtx<'ctx, '_> {
             .iter()
             .map(|local_data| local_data.ty.into_basic_type_metadata(self))
             .collect::<Vec<_>>();
-        let fn_ty = self.declare_fn(ret_ty, formal_param_tys.as_slice());
+        let fn_ty = self.declare_fn(
+            ret_ty,
+            formal_param_tys.as_slice(),
+            lir_body_metadata.is_varargs,
+        );
         let linkage = lir_body_metadata.linkage.into_linkage();
         let calling_convention = lir_body_metadata.call_conv.into_call_conv();
         let fn_val = self.ll_module.add_function(name, fn_ty, Some(linkage));
@@ -195,6 +203,7 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
             ll_module,
             lir_ctx,
             instances: RefCell::new(HashMap::new()),
+            alloc_map: RefCell::new(GlobalAllocMap::new()),
         }
     }
 
@@ -202,16 +211,17 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
         &self,
         ret_ty: BasicTypeEnum<'ll>,
         param_tys: &[BasicMetadataTypeEnum<'ll>],
+        is_varargs: bool,
     ) -> FunctionType<'ll> {
         let fn_ty = match ret_ty {
-            BasicTypeEnum::IntType(int_type) => int_type.fn_type(param_tys, false),
-            BasicTypeEnum::ArrayType(array_type) => array_type.fn_type(param_tys, false),
-            BasicTypeEnum::FloatType(float_type) => float_type.fn_type(param_tys, false),
-            BasicTypeEnum::PointerType(pointer_type) => pointer_type.fn_type(param_tys, false),
-            BasicTypeEnum::StructType(struct_type) => struct_type.fn_type(param_tys, false),
-            BasicTypeEnum::VectorType(vector_type) => vector_type.fn_type(param_tys, false),
+            BasicTypeEnum::IntType(int_type) => int_type.fn_type(param_tys, is_varargs),
+            BasicTypeEnum::ArrayType(array_type) => array_type.fn_type(param_tys, is_varargs),
+            BasicTypeEnum::FloatType(float_type) => float_type.fn_type(param_tys, is_varargs),
+            BasicTypeEnum::PointerType(pointer_type) => pointer_type.fn_type(param_tys, is_varargs),
+            BasicTypeEnum::StructType(struct_type) => struct_type.fn_type(param_tys, is_varargs),
+            BasicTypeEnum::VectorType(vector_type) => vector_type.fn_type(param_tys, is_varargs),
             BasicTypeEnum::ScalableVectorType(scalable_vector_type) => {
-                scalable_vector_type.fn_type(param_tys, false)
+                scalable_vector_type.fn_type(param_tys, is_varargs)
             }
         };
 
@@ -366,8 +376,23 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
             self.predefine_body(&lir_body.metadata, &lir_body.ret_and_args);
         }
 
+        // Take ownership of the allocation map from the TirUnit
+        // This must happen after predefine_body so we can still borrow lir_unit.bodies
+        let TirUnit {
+            bodies, alloc_map, ..
+        } = lir_unit;
+        *self.alloc_map.borrow_mut() = alloc_map;
+
         // Now that all functions are pre-defined, we can compile the bodies.
-        for lir_body in lir_unit.bodies {
+        for lir_body in bodies {
+            // Skip external declarations (like libc functions) that have no body.
+            if lir_body.metadata.is_declaration {
+                debug!(
+                    "Skipping body definition for declaration: {}",
+                    lir_body.metadata.name
+                );
+                continue;
+            }
             // It corresponds to:
             // ```rust
             // for &(mono_item, item_data) in &mono_items {
@@ -432,5 +457,61 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
 
         debug!("get_or_define_fn(name: {}) defined", name);
         fn_val
+    }
+
+    fn get_fn_by_name(&self, name: &str) -> Option<FunctionValue<'ll>> {
+        if let Some(f) = self.ll_module.get_function(name) {
+            debug!("get_fn_by_name(name: {}) found in module", name);
+            return Some(f);
+        }
+
+        debug!("get_fn_by_name(name: {}) not found", name);
+        None
+    }
+
+    fn global_alloc(&self, alloc_id: AllocId) -> GlobalAlloc {
+        self.alloc_map
+            .borrow()
+            .get(alloc_id)
+            .cloned()
+            .unwrap_or_else(|| panic!("unknown allocation ID: {:?}", alloc_id))
+    }
+
+    fn const_alloc_to_value(&self, alloc: &Allocation) -> BasicValueEnum<'ll> {
+        // Create a global constant from the allocation bytes
+        let bytes = alloc.bytes();
+        let i8_type = self.ll_context.i8_type();
+        let array_type = i8_type.array_type(bytes.len() as u32);
+
+        // Create constant values for each byte
+        let byte_values: Vec<_> = bytes
+            .iter()
+            .map(|&b| i8_type.const_int(b as u64, false))
+            .collect();
+        let const_array = i8_type.const_array(&byte_values);
+
+        // Create a global variable with the constant array
+        let global = self.ll_module.add_global(array_type, None, "const_data");
+        global.set_initializer(&const_array);
+        global.set_constant(true);
+        global.set_linkage(inkwell::module::Linkage::Private);
+        global.set_unnamed_addr(true);
+
+        // Return a pointer to the global
+        global.as_pointer_value().into()
+    }
+
+    fn get_fn_from_alloc(&self, alloc_id: AllocId) -> FunctionValue<'ll> {
+        let global_alloc = self.global_alloc(alloc_id);
+        match global_alloc {
+            GlobalAlloc::Function(def_id) => {
+                // Look up the function by its DefId
+                if let Some(instance) = self.instances.borrow().get(&def_id) {
+                    return (*instance).into_function_value();
+                }
+                panic!("Function with DefId {:?} not found in instances", def_id);
+            }
+            _ => panic!("Expected Function allocation, got {:?}", global_alloc),
+        }
     }
 }
