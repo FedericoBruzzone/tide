@@ -11,6 +11,7 @@ use tidec_tir::{
         Statement, Terminator, UnaryOp,
     },
 };
+use tidec_utils::idx::Idx;
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, info, instrument};
 
@@ -41,6 +42,20 @@ pub struct FnCtx<'be, 'ctx, B: BuilderMethods<'be, 'ctx>> {
 }
 
 impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
+    /// Get the type of a local variable by its index.
+    /// This handles locals that are in either `ret_and_args` or `locals`.
+    fn local_ty(&self, local: Local) -> tidec_tir::TirTy<'ctx> {
+        let ret_and_args_len = self.lir_body.ret_and_args.len();
+        let local_idx = local.idx();
+        if local_idx < ret_and_args_len {
+            self.lir_body.ret_and_args[local].ty
+        } else {
+            // Adjust index to account for ret_and_args
+            let adjusted_idx = local_idx - ret_and_args_len;
+            self.lir_body.locals[Local::new(adjusted_idx)].ty
+        }
+    }
+
     /// Codegen the given TIR basic block.
     /// This creates a new builder for the basic block and generates the instructions in it.
     /// It also updates the `cached_bbs` field to avoid creating multiple basic blocks for the same TIR basic block.
@@ -82,9 +97,9 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                 match place.try_local() {
                     Some(local) => {
                         debug!("Assigning to local {:?}", local);
-                        match self.locals[local] {
+                        match &self.locals[local] {
                             LocalRef::PlaceRef(place_ref) => {
-                                self.codegen_rvalue(builder, place_ref, rvalue)
+                                self.codegen_rvalue(builder, *place_ref, rvalue)
                             }
                             LocalRef::OperandRef(operand_ref) => {
                                 // We cannot assign to an operand ref that is not a ZST
@@ -312,17 +327,65 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         builder: &mut B,
         func: &Operand<'ctx>,
         args: &[Operand<'ctx>],
-        _destination: &Place,
-        _target: BasicBlock,
+        destination: &Place,
+        target: BasicBlock,
     ) {
         // This is the callee function reference. `func` is either a function pointer or a direct function.
-        let _func_ref = self.codegen_operand(builder, func);
-        let _arg_vals: Vec<B::Value> = args
+        let func_ref = self.codegen_operand(builder, func);
+
+        // Get the function value from the operand.
+        // For direct function calls via Indirect allocations, the function pointer
+        // is returned as an Immediate value. We need to look up the actual function.
+        //
+        // In the TIR, function calls use ConstValue::Indirect pointing to a
+        // GlobalAlloc::Function. The from_const_alloc method converts this to
+        // a function pointer value.
+        let fn_value = match &func_ref.operand_val {
+            OperandVal::Immediate(_ptr_val) => {
+                // The pointer value is actually a function pointer.
+                // We need to get the function value from the module by looking
+                // at what the original operand was.
+                //
+                // For now, we extract the function name from the operand if it's
+                // a known function reference (ConstValue::Indirect -> GlobalAlloc::Function).
+                // This is a simplification - in a full implementation, we'd use
+                // the function type to build an indirect call.
+                if let Operand::Const(const_op) = func {
+                    if let tidec_tir::syntax::ConstValue::Indirect { alloc_id, .. } =
+                        const_op.value()
+                    {
+                        let global_alloc = builder.ctx().global_alloc(alloc_id);
+                        if matches!(global_alloc, tidec_tir::alloc::GlobalAlloc::Function(_)) {
+                            // Look up the function by its allocation ID
+                            builder.ctx().get_fn_from_alloc(alloc_id)
+                        } else {
+                            todo!("Handle indirect function calls via function pointer")
+                        }
+                    } else {
+                        todo!("Handle indirect function calls via function pointer")
+                    }
+                } else {
+                    todo!("Handle indirect function calls via function pointer")
+                }
+            }
+            OperandVal::Pair(_, _) => {
+                todo!("Handle wide pointer function calls")
+            }
+            OperandVal::Ref(_) => {
+                panic!("Cannot call a function by reference");
+            }
+            OperandVal::Zst => {
+                panic!("Cannot call a ZST function");
+            }
+        };
+
+        // Codegen the arguments
+        let arg_vals: Vec<B::MetadataValue> = args
             .iter()
             .map(|arg| {
                 let arg_ref = self.codegen_operand(builder, arg);
                 match arg_ref.operand_val {
-                    OperandVal::Immediate(val) => val,
+                    OperandVal::Immediate(val) => val.into(),
                     OperandVal::Pair(_, _) => {
                         todo!("Handle wide pointer arguments in function calls")
                     }
@@ -336,33 +399,21 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
             })
             .collect();
 
-        // let ret_val = match func_ref.operand_val {
-        //     OperandVal::Immediate(func_val) => builder.build_call(func_val, &arg_vals),
-        //     OperandVal::Pair(_, _) => {
-        //         todo!("Handle wide pointer function calls")
-        //     }
-        //     OperandVal::Ref(_) => {
-        //         panic!("Cannot call a function by reference");
-        //     }
-        //     OperandVal::Zst => {
-        //         panic!("Cannot call a ZST function");
-        //     }
-        // };
+        // Build the call instruction
+        let ret_val = builder.build_call(fn_value, &arg_vals, "call");
 
-        // // Handle the return value based on the function ABI
-        // match self.fn_abi.ret.mode {
-        //     PassMode::Ignore | PassMode::Indirect => {
-        //         // Nothing to do for ignored or indirect returns
-        //     }
-        //     PassMode::Direct => {
-        //         let dest_ref = self.codegen_place(destination);
-        //         builder.store_operand(&dest_ref, &OperandRef::new_immediate(ret_val, self.fn_abi.ret.layout));
-        //     }
-        // }
+        // Handle the return value - store it in the destination if not void
+        if let (Some(ret), Some(local)) = (ret_val, destination.try_local()) {
+            let layout = builder.ctx().layout_of(self.local_ty(local));
+            self.overwrite_local(
+                local,
+                LocalRef::OperandRef(OperandRef::new_immediate(ret, layout)),
+            );
+        }
 
-        // // Jump to the target basic block
-        // let be_target_bb = self.get_or_insert_bb(target);
-        // builder.build_br(be_target_bb);
+        // Jump to the target basic block
+        let be_target_bb = self.get_or_insert_bb(target);
+        builder.build_unconditional_br(be_target_bb);
     }
 
     /// Codegen a return terminator.
@@ -401,9 +452,7 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
     /// If the place is already an operand ref, it returns it directly.
     /// Otherwise, it generates the place and loads the value from it.
     fn codegen_consume(&mut self, builder: &mut B, place: &Place) -> OperandRef<'ctx, B::Value> {
-        let layout = builder
-            .ctx()
-            .layout_of(self.lir_body.ret_and_args[place.local].ty);
+        let layout = builder.ctx().layout_of(self.local_ty(place.local));
 
         if layout.is_zst() {
             return OperandRef::new_zst(layout);
@@ -418,10 +467,10 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
     }
 
     fn try_codegen_consume_operand(&self, place: &Place) -> Option<OperandRef<'ctx, B::Value>> {
-        match self.locals[place.local] {
+        match &self.locals[place.local] {
             LocalRef::OperandRef(operand_ref) => {
                 // TODO(bruzzone): we should handle projections here
-                Some(operand_ref)
+                Some(*operand_ref)
             }
             _ => None,
         }
@@ -434,8 +483,8 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
     // TODO(bruzzone): consider add the builder as parameter to this function
     fn codegen_place(&mut self, place: &Place) -> PlaceRef<'ctx, B::Value> {
         let local = place.local;
-        match self.locals[local] {
-            LocalRef::PlaceRef(place_ref) => place_ref,
+        match &self.locals[local] {
+            LocalRef::PlaceRef(place_ref) => *place_ref,
             LocalRef::OperandRef(operand_ref) => {
                 panic!(
                     "Cannot convert an operand ref {:?} to a place ref for local {:?}",

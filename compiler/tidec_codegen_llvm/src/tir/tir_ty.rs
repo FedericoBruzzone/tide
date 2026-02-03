@@ -29,7 +29,10 @@ impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
             ty::TirTy::F32 => BasicTypeEnum::FloatType(ctx.ll_context.f32_type()).into(),
             ty::TirTy::F64 => BasicTypeEnum::FloatType(ctx.ll_context.f64_type()).into(),
             ty::TirTy::F128 => BasicTypeEnum::FloatType(ctx.ll_context.f128_type()).into(),
-            ty::TirTy::RawPtr(_, _) => todo!(),
+            ty::TirTy::RawPtr(_, _) => {
+                // In LLVM's opaque pointer model, all pointers are just `ptr`
+                BasicTypeEnum::PointerType(ctx.ll_context.ptr_type(Default::default())).into()
+            }
             ty::TirTy::Metadata => {
                 BasicMetadataTypeEnum::MetadataType(ctx.ll_context.metadata_type())
             }
@@ -52,7 +55,10 @@ impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
             ty::TirTy::F32 => BasicTypeEnum::FloatType(ctx.ll_context.f32_type()),
             ty::TirTy::F64 => BasicTypeEnum::FloatType(ctx.ll_context.f64_type()),
             ty::TirTy::F128 => BasicTypeEnum::FloatType(ctx.ll_context.f128_type()),
-            ty::TirTy::RawPtr(_, _) => todo!(),
+            ty::TirTy::RawPtr(_, _) => {
+                // In LLVM's opaque pointer model, all pointers are just `ptr`
+                BasicTypeEnum::PointerType(ctx.ll_context.ptr_type(Default::default()))
+            }
             ty::TirTy::Metadata => panic!("Metadata type cannot be converted to BasicTypeEnum"),
         }
     }

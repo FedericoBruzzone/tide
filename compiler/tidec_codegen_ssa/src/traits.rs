@@ -5,6 +5,7 @@ use tidec_abi::{
 };
 use tidec_tir::{
     TirTy,
+    alloc::{AllocId, Allocation, GlobalAlloc},
     body::{TirBody, TirBodyMetadata, TirUnit},
     ctx::TirCtx,
     syntax::{ConstScalar, Local, LocalData},
@@ -45,7 +46,7 @@ pub trait CodegenBackendTypes {
     type MetadataType: Copy + PartialEq + std::fmt::Debug;
     /// A `MetadataValue` is a metadata value in the codegen backend.
     /// E.g., a debug info node or TBAA (Type-Based Alias Analysis) node.
-    type MetadataValue: Copy + PartialEq + std::fmt::Debug;
+    type MetadataValue: Copy + PartialEq + std::fmt::Debug + From<Self::Value>;
 }
 
 /// The codegen backend trait.
@@ -107,6 +108,19 @@ pub trait CodegenMethods<'ctx>:
         lir_fn_metadata: &TirBodyMetadata,
         lir_fn_ret_and_args: &IdxVec<Local, LocalData<'ctx>>,
     ) -> Self::FunctionValue;
+
+    /// Returns the function value for the given function name if it exists.
+    fn get_fn_by_name(&self, name: &str) -> Option<Self::FunctionValue>;
+
+    /// Get a global allocation by its ID.
+    /// Returns a cloned copy to avoid borrow checker issues with RefCell.
+    fn global_alloc(&self, alloc_id: AllocId) -> GlobalAlloc;
+
+    /// Create a global constant from an allocation and return a pointer to it.
+    fn const_alloc_to_value(&self, alloc: &Allocation) -> Self::Value;
+
+    /// Get the function value for a function allocation.
+    fn get_fn_from_alloc(&self, alloc_id: AllocId) -> Self::FunctionValue;
 }
 
 /// The builder methods for the codegen backend.
@@ -212,4 +226,24 @@ pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
         const_scalar: ConstScalar,
         ty_layout: TyAndLayout<TirTy<'ctx>>,
     ) -> Self::Value;
+
+    /// Build a global constant from an allocation.
+    /// This creates a global constant and returns a pointer to it.
+    fn const_data_from_alloc(&mut self, alloc: &Allocation) -> Self::Value;
+
+    /// Build a function call instruction.
+    /// Returns the return value of the call (or a placeholder for void returns).
+    fn build_call(
+        &mut self,
+        fn_value: Self::FunctionValue,
+        args: &[Self::MetadataValue],
+        name: &str,
+    ) -> Option<Self::Value>;
+
+    /// Build an unconditional branch to the given basic block.
+    fn build_unconditional_br(&mut self, target: Self::BasicBlock);
+
+    /// Convert a function value to a pointer value.
+    /// This is used when passing functions as arguments or storing them.
+    fn fn_to_ptr(&mut self, fn_value: Self::FunctionValue) -> Self::Value;
 }

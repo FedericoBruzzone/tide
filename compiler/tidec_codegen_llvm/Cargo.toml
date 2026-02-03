@@ -15,7 +15,7 @@ tracing = "0.1.41"
 
 
 # Old versions
-# inkwell = { version = "0.5.0", features = ["llvm18-0"] } 
+# inkwell = { version = "0.5.0", features = ["llvm18-0"] }
 # inkwell = { git = "https://github.com/stevefan1999-personal/inkwell", rev = "0732f8dcb7b2b7f8edc25895d6dbd37ba439672c", features = [ "llvm19-1" ] }
 # inkwell = { git = "https://github.com/TheDan64/inkwell", rev = "279ef78b3507a431e48767748c2335aef26b7d9f", features = [ "llvm18-1" ] }
 # inkwell = { git = "https://github.com/TheDan64/inkwell", rev = "279ef78b3507a431e48767748c2335aef26b7d9f", features = [ "llvm20-1" ] }

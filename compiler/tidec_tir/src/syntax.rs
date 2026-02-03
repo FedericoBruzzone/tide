@@ -1,4 +1,4 @@
-use crate::{ctx::TirCtx, TirTy};
+use crate::{alloc::AllocId, ctx::TirCtx, TirTy};
 use std::num::NonZero;
 use tidec_abi::size_and_align::Size;
 use tidec_utils::idx::Idx;
@@ -96,7 +96,7 @@ pub enum Projection {
 #[derive(Debug, Clone)]
 /// Represents a right-hand side (RValue) in TIR during code generation.
 ///
-/// An `RValue` is something that can be **evaluated to produce a value**.  
+/// An `RValue` is something that can be **evaluated to produce a value**.
 /// It corresponds to expressions on the right-hand side of assignments or
 /// the values returned by function calls in source code.
 ///
@@ -197,7 +197,7 @@ pub enum Operand<'ctx> {
     Const(ConstOperand<'ctx>),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 /// Semantically, a constant is already a value; it cannot change.
 // TODO(bruzzone): Add more variants for different constant types.
 pub enum ConstOperand<'ctx> {
@@ -215,12 +215,12 @@ impl<'ctx> ConstOperand<'ctx> {
 
     pub fn value(&self) -> ConstValue {
         match self {
-            ConstOperand::Value(val, _) => *val,
+            ConstOperand::Value(val, _) => val.clone(),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 /// Represents a constant value.
 // TODO(bruzzone): Add indirect variant. A value not representable by the other variants; needs to be stored in-memory.
 // TODO(bruzzone): Add slice variant for strings, arrays, etc. We could use the `Invariant` variant
@@ -231,55 +231,50 @@ pub enum ConstValue {
     /// A constant scalar value.
     /// The consts with this variant have typically a layout that is compatible with scalar types, such as integers, floats, or pointers. That is, the backend representation of the constant is a scalar value.
     Scalar(ConstScalar),
-    // A value that cannot be represented directly by the other variants,
-    // and thus must be stored in memory.
-    //
-    // This is used for constants such as strings, slices, and large or
-    // aggregate values that do not fit into a single scalar or scalar pair.
-    //
-    // # Fields
-    //
-    // * [`alloc_id`] — An abstract identifier for the allocation backing
-    //   this value. Unlike a real machine pointer, an [`AllocId`] refers
-    //   to a constant allocation managed by the compiler. This indirection
-    //   ensures that when a "raw constant" (which is basically just an
-    //   `AllocId`) is turned into a [`ConstValue`] and later converted
-    //   back, the identity of the original allocation is preserved.
-    //
-    // * [`offset`] — A byte offset into the referenced allocation. This
-    //   allows an `Indirect` constant to represent a subslice or substring
-    //   within a larger allocation, rather than always starting at the
-    //   beginning. For example, a slice `&arr[3..]` would use the same
-    //   `AllocId` as `arr`, but with a nonzero offset.
-    //
-    // # Notes
-    //
-    // * This variant must **not** be used for scalars or zero-sized types
-    //   (those are handled by other variants).
-    // * It is perfectly valid, however, for `&str` or other slice types
-    //   to be represented as `Indirect`.
-    //
-    // # Example
-    //
-    // ```rust
-    // // For `const S: &str = "hi";`
-    // // tidec creates a global allocation containing the bytes [104, 105],
-    // // assigns it an `AllocId`, and represents `S` as:
-    //
-    // ConstValue::Indirect {
-    //     alloc_id: <id of "hi">,
-    //     offset: 0,
-    // }
-    // ```
-    // Indirect {
-    //     /// The backing memory of the value. This may cover more than just
-    //     /// the bytes of the current value, e.g. when pointing into a larger
-    //     /// `ConstValue`. The `AllocId` is an abstract identifier for
-    //     /// the allocation.
-    //     alloc_id: AllocId,
-    //     /// The byte offset into the referenced allocation.
-    //     offset: u64,
-    // },
+    /// A value not representable by the other variants; needs to be stored in-memory.
+    ///
+    /// This is used for constants such as strings, slices, functions, and large or
+    /// aggregate values that do not fit into a single scalar or scalar pair.
+    ///
+    /// Must *not* be used for scalars or ZST, but having `&str` or other slices
+    /// in this variant is fine.
+    ///
+    /// # Fields
+    ///
+    /// * `alloc_id` — An abstract identifier for the allocation backing
+    ///   this value. Unlike a real machine pointer, an [`AllocId`] refers
+    ///   to a constant allocation managed by the compiler. This indirection
+    ///   ensures that when a "raw constant" (which is basically just an
+    ///   `AllocId`) is turned into a [`ConstValue`] and later converted
+    ///   back, the identity of the original allocation is preserved.
+    ///
+    /// * `offset` — A byte offset into the referenced allocation. This
+    ///   allows an `Indirect` constant to represent a subslice or substring
+    ///   within a larger allocation, rather than always starting at the
+    ///   beginning. For example, a slice `&arr[3..]` would use the same
+    ///   `AllocId` as `arr`, but with a nonzero offset.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // For `const S: &str = "hi";`
+    /// // tidec creates a global allocation containing the bytes [104, 105],
+    /// // assigns it an `AllocId`, and represents `S` as:
+    ///
+    /// ConstValue::Indirect {
+    ///     alloc_id: <id of "hi">,
+    ///     offset: Size::ZERO,
+    /// }
+    /// ```
+    Indirect {
+        /// The backing memory of the value. This may cover more than just
+        /// the bytes of the current value, e.g. when pointing into a larger
+        /// `ConstValue`. The `AllocId` is an abstract identifier for
+        /// the allocation.
+        alloc_id: AllocId,
+        /// The byte offset into the referenced allocation.
+        offset: Size,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

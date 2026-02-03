@@ -44,6 +44,12 @@ impl Size {
         Size(bits / 8 + (bits % 8).div_ceil(8))
     }
 
+    /// Creates a `Size` from a byte count.
+    #[inline]
+    pub fn from_bytes(bytes: impl TryInto<u64>) -> Size {
+        Size(bytes.try_into().ok().unwrap())
+    }
+
     #[inline]
     /// Returns the size in bytes.
     pub fn bytes(&self) -> u64 {
