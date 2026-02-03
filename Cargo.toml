@@ -4,7 +4,7 @@ members = [
     # tidy-alphabetical-start
     "compiler/tidec",
     "compiler/tidec_abi",
-    "compiler/tidec_codegen_llvm", 
+    "compiler/tidec_codegen_llvm",
     "compiler/tidec_codegen_ssa",
     "compiler/tidec_log",
     "compiler/tidec_tir",

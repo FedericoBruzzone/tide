@@ -29,7 +29,7 @@ impl AbiAndPrefAlign {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// Size of a type in bytes.
 pub struct Size(u64);
 

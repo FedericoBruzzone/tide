@@ -17,7 +17,7 @@ use inkwell::OptimizationLevel;
 use tidec_abi::calling_convention::function::{ArgAbi, FnAbi, PassMode};
 use tidec_abi::layout::{BackendRepr, TyAndLayout};
 use tidec_codegen_ssa::tir;
-use tidec_tir::alloc::{AllocId, Allocation, GlobalAlloc, GlobalAllocMap};
+use tidec_tir::alloc::{AllocId, Allocation, GlobalAlloc};
 use tidec_tir::ctx::{EmitKind, TirCtx};
 use tidec_tir::TirTy;
 use tidec_utils::index_vec::IdxVec;
@@ -49,9 +49,6 @@ pub struct CodegenCtx<'ctx, 'll> {
     // TODO: Probably we could remove this and use only the module to find functions (more efficient?).
     // Something like: `self.ll_module.get_function(<name>)` (see `get_fn`).
     pub instances: RefCell<HashMap<DefId, AnyValueEnum<'ll>>>,
-    /// Global allocations for constants (strings, function references, etc.).
-    /// Uses RefCell for interior mutability since we need to access it through &self.
-    pub alloc_map: RefCell<GlobalAllocMap>,
 }
 
 impl<'ll, 'ctx> Deref for CodegenCtx<'ctx, 'll> {
@@ -203,7 +200,6 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
             ll_module,
             lir_ctx,
             instances: RefCell::new(HashMap::new()),
-            alloc_map: RefCell::new(GlobalAllocMap::new()),
         }
     }
 
@@ -376,12 +372,8 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
             self.predefine_body(&lir_body.metadata, &lir_body.ret_and_args);
         }
 
-        // Take ownership of the allocation map from the TirUnit
-        // This must happen after predefine_body so we can still borrow lir_unit.bodies
-        let TirUnit {
-            bodies, alloc_map, ..
-        } = lir_unit;
-        *self.alloc_map.borrow_mut() = alloc_map;
+        // Destructure the TirUnit to get the bodies
+        let TirUnit { bodies, .. } = lir_unit;
 
         // Now that all functions are pre-defined, we can compile the bodies.
         for lir_body in bodies {
@@ -469,12 +461,8 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
         None
     }
 
-    fn global_alloc(&self, alloc_id: AllocId) -> GlobalAlloc {
-        self.alloc_map
-            .borrow()
-            .get(alloc_id)
-            .cloned()
-            .unwrap_or_else(|| panic!("unknown allocation ID: {:?}", alloc_id))
+    fn global_alloc(&self, alloc_id: AllocId) -> GlobalAlloc<'ctx> {
+        self.lir_ctx.get_global_alloc_unwrap(alloc_id)
     }
 
     fn const_alloc_to_value(&self, alloc: &Allocation) -> BasicValueEnum<'ll> {

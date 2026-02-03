@@ -9,7 +9,9 @@
 //! - [`GlobalAlloc`]: What an allocation can represent (memory, function, etc.)
 
 use crate::body::DefId;
-use std::collections::HashMap;
+use crate::TirAllocation;
+use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tidec_abi::size_and_align::{Align, Size};
 
@@ -48,6 +50,8 @@ impl Default for AllocId {
 ///
 /// An `Allocation` contains the raw bytes of a constant value, along with
 /// metadata about its alignment and any relocations (pointers to other allocations).
+///
+/// This type implements `Eq` and `Hash` to support interning via `InternedSet`.
 #[derive(Debug, Clone)]
 pub struct Allocation {
     /// The raw bytes of the allocation.
@@ -56,9 +60,34 @@ pub struct Allocation {
     align: Align,
     /// Relocations: maps byte offsets to the AllocId they point to.
     /// This is used for pointers within the allocation.
-    relocations: HashMap<Size, AllocId>,
+    /// Uses BTreeMap for deterministic ordering (required for Hash).
+    relocations: BTreeMap<Size, AllocId>,
     /// Whether this allocation is mutable.
     mutability: Mutability,
+}
+
+impl PartialEq for Allocation {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes == other.bytes
+            && self.align == other.align
+            && self.relocations == other.relocations
+            && self.mutability == other.mutability
+    }
+}
+
+impl Eq for Allocation {}
+
+impl Hash for Allocation {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.bytes.hash(state);
+        self.align.hash(state);
+        // Hash relocations in a deterministic order (BTreeMap is sorted)
+        for (offset, alloc_id) in &self.relocations {
+            offset.hash(state);
+            alloc_id.hash(state);
+        }
+        self.mutability.hash(state);
+    }
 }
 
 /// Mutability of an allocation.
@@ -76,7 +105,7 @@ impl Allocation {
         Self {
             bytes,
             align,
-            relocations: HashMap::new(),
+            relocations: BTreeMap::new(),
             mutability: Mutability::Immutable,
         }
     }
@@ -121,7 +150,7 @@ impl Allocation {
     }
 
     /// Get the relocations in this allocation.
-    pub fn relocations(&self) -> &HashMap<Size, AllocId> {
+    pub fn relocations(&self) -> &BTreeMap<Size, AllocId> {
         &self.relocations
     }
 }
@@ -130,21 +159,22 @@ impl Allocation {
 ///
 /// This enum describes the different kinds of things that can be stored
 /// in the global allocation map.
-#[derive(Debug, Clone)]
-pub enum GlobalAlloc {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GlobalAlloc<'ctx> {
     /// A constant memory allocation (e.g., a string literal, array, or struct).
-    Memory(Allocation),
+    /// The allocation is interned and wrapped in `TirAllocation`.
+    Memory(TirAllocation<'ctx>),
     /// A reference to a function.
     Function(DefId),
     /// A static variable.
     Static(DefId),
 }
 
-impl GlobalAlloc {
-    /// Returns `Some(&Allocation)` if this is a memory allocation.
-    pub fn unwrap_memory(&self) -> &Allocation {
+impl<'ctx> GlobalAlloc<'ctx> {
+    /// Returns the `TirAllocation` if this is a memory allocation.
+    pub fn unwrap_memory(&self) -> TirAllocation<'ctx> {
         match self {
-            GlobalAlloc::Memory(alloc) => alloc,
+            GlobalAlloc::Memory(alloc) => *alloc,
             _ => panic!("expected Memory, got {:?}", self),
         }
     }
@@ -155,62 +185,6 @@ impl GlobalAlloc {
             GlobalAlloc::Function(def_id) => *def_id,
             _ => panic!("expected Function, got {:?}", self),
         }
-    }
-}
-
-/// A map from allocation IDs to global allocations.
-///
-/// This is used to store all constant allocations during compilation.
-#[derive(Debug, Default)]
-pub struct GlobalAllocMap {
-    allocations: HashMap<AllocId, GlobalAlloc>,
-}
-
-impl GlobalAllocMap {
-    /// Create a new empty allocation map.
-    pub fn new() -> Self {
-        Self {
-            allocations: HashMap::new(),
-        }
-    }
-
-    /// Insert a new allocation and return its ID.
-    pub fn insert(&mut self, alloc: GlobalAlloc) -> AllocId {
-        let id = AllocId::new();
-        self.allocations.insert(id, alloc);
-        id
-    }
-
-    /// Insert a memory allocation and return its ID.
-    pub fn insert_memory(&mut self, alloc: Allocation) -> AllocId {
-        self.insert(GlobalAlloc::Memory(alloc))
-    }
-
-    /// Insert a string allocation and return its ID.
-    pub fn insert_string(&mut self, s: &str) -> AllocId {
-        self.insert_memory(Allocation::from_c_str(s))
-    }
-
-    /// Insert a function reference and return its ID.
-    pub fn insert_function(&mut self, def_id: DefId) -> AllocId {
-        self.insert(GlobalAlloc::Function(def_id))
-    }
-
-    /// Get the allocation for the given ID.
-    pub fn get(&self, id: AllocId) -> Option<&GlobalAlloc> {
-        self.allocations.get(&id)
-    }
-
-    /// Get the allocation for the given ID, panicking if not found.
-    pub fn get_unwrap(&self, id: AllocId) -> &GlobalAlloc {
-        self.allocations
-            .get(&id)
-            .unwrap_or_else(|| panic!("unknown allocation ID: {:?}", id))
-    }
-
-    /// Iterate over all allocations.
-    pub fn iter(&self) -> impl Iterator<Item = (AllocId, &GlobalAlloc)> {
-        self.allocations.iter().map(|(k, v)| (*k, v))
     }
 }
 
@@ -230,13 +204,5 @@ mod tests {
         let alloc = Allocation::from_c_str("hello");
         assert_eq!(alloc.bytes(), b"hello\0");
         assert_eq!(alloc.size(), Size::from_bytes(6));
-    }
-
-    #[test]
-    fn test_global_alloc_map() {
-        let mut map = GlobalAllocMap::new();
-        let id = map.insert_string("test");
-        let alloc = map.get_unwrap(id);
-        assert!(matches!(alloc, GlobalAlloc::Memory(_)));
     }
 }
