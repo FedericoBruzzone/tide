@@ -240,7 +240,7 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
                 &cpu,
                 &features,
                 OptimizationLevel::Default,
-                RelocMode::Default,
+                RelocMode::PIC,
                 CodeModel::Default,
             )
             .expect("Failed to create target machine")
