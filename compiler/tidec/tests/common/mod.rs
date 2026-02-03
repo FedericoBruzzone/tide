@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Integration test utilities for the Tide compiler.
 //!
 //! This crate provides shared infrastructure for end-to-end compilation tests.
