@@ -136,13 +136,35 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         }
     }
 
+    /// Codegen an rvalue and store the result into a place.
+    ///
+    /// This is the place-based counterpart to `codegen_rvalue_operand`. It evaluates
+    /// the rvalue, then writes the resulting value into the memory location described
+    /// by `place_ref` using a store instruction.
+    ///
+    /// This is required for locals with `BackendRepr::Memory` (i.e., types that must
+    /// live in memory rather than in SSA registers).
     pub fn codegen_rvalue(
         &mut self,
         _builder: &mut B,
         _place_ref: PlaceRef<'ctx, B::Value>,
         _rvalue: &RValue<'ctx>,
     ) {
-        todo!("Implement codegen_rvalue");
+        let operand = self.codegen_rvalue_operand(builder, rvalue);
+        match operand.operand_val {
+            OperandVal::Immediate(val) => {
+                builder.build_store(val, place_ref.place_val.value, place_ref.place_val.align);
+            }
+            OperandVal::Zst => {
+                // Zero-sized types have no bytes to store — nothing to do.
+            }
+            OperandVal::Pair(_a, _b) => {
+                todo!("Handle storing scalar pair into a place (e.g., fat pointers)")
+            }
+            OperandVal::Ref(_src_place_val) => {
+                todo!("Handle storing a memory reference into a place (requires memcpy)")
+            }
+        }
     }
 
     #[instrument(level = "debug", skip(self, builder))]
@@ -327,7 +349,7 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         builder: &mut B,
         func: &Operand<'ctx>,
         args: &[Operand<'ctx>],
-        destination: &Place,
+        destination: &Place<'ctx>,
         target: BasicBlock,
     ) {
         // This is the callee function reference. `func` is either a function pointer or a direct function.
