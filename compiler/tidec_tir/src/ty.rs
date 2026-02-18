@@ -134,32 +134,31 @@ impl<I: Interner> Eq for TirTy<I> {}
 impl<I: Interner> Hash for TirTy<I> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
-            TirTy::Unit => 17.hash(state),
-            TirTy::I8 => 0.hash(state),
-            TirTy::I16 => 1.hash(state),
-            TirTy::I32 => 2.hash(state),
-            TirTy::I64 => 3.hash(state),
-            TirTy::I128 => 4.hash(state),
-            TirTy::U8 => 5.hash(state),
-            TirTy::U16 => 6.hash(state),
-            TirTy::U32 => 7.hash(state),
-            TirTy::U64 => 8.hash(state),
-            TirTy::U128 => 9.hash(state),
-            TirTy::F16 => 10.hash(state),
-            TirTy::F32 => 11.hash(state),
-            TirTy::F64 => 12.hash(state),
-            TirTy::F128 => 13.hash(state),
+            TirTy::Unit => 0.hash(state),
+            TirTy::I8 => 1.hash(state),
+            TirTy::I16 => 2.hash(state),
+            TirTy::I32 => 3.hash(state),
+            TirTy::I64 => 4.hash(state),
+            TirTy::I128 => 5.hash(state),
+            TirTy::U8 => 6.hash(state),
+            TirTy::U16 => 7.hash(state),
+            TirTy::U32 => 8.hash(state),
+            TirTy::U64 => 9.hash(state),
+            TirTy::U128 => 10.hash(state),
+            TirTy::F16 => 11.hash(state),
+            TirTy::F32 => 12.hash(state),
+            TirTy::F64 => 13.hash(state),
+            TirTy::F128 => 14.hash(state),
             TirTy::RawPtr(ty, mutability) => {
-                14.hash(state);
+                15.hash(state);
                 ty.hash(state);
                 mutability.hash(state);
             }
             // TirTy::FnPty { param_tys, ret_ty } => {
-            //     15.hash(state);
+            //     16.hash(state);
             //     param_tys.hash(state);
             //     ret_ty.hash(state);
             // }
-            TirTy::Metadata => 16.hash(state),
-        }
+            TirTy::Metadata => 17.hash(state),
     }
 }

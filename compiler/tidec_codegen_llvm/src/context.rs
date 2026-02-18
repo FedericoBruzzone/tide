@@ -112,8 +112,8 @@ impl<'ctx> PreDefineCodegenMethods<'ctx> for CodegenCtx<'ctx, '_> {
         fn_global_value.set_unnamed_address(unnamed_addr);
 
         debug!(
-            "get_or_declare_fn((name: {}, ret_ty: {:?}, param_tys: {:?}, linkage: {:?}, visibility: {:?}, calling_convention: {:?}, unnamed_addr: {:?})) delared",
-            name, ret_ty, formal_param_tys, linkage, visibility, calling_convention, unnamed_addr
+            "get_or_declare_fn((name: {}, ret_ty: {:?}, param_tys: {:?}, linkage: {:?}, visibility: {:?}, calling_convention: {:?}, unnamed_addr: {:?})) declared",
+            name, ret_ty_tir, formal_param_tys, linkage, visibility, calling_convention, unnamed_addr
         );
 
         self.instances.borrow_mut().insert(
