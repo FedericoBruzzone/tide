@@ -216,6 +216,17 @@ pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
     /// The alignment is the alignment of the place reference.
     fn build_load(&mut self, ty: Self::Type, ptr: Self::Value, align: Align) -> Self::Value;
 
+    /// Build a store instruction to write a value into memory at the given pointer.
+    ///
+    /// This is the counterpart of `build_load`. It writes the value `val` into the
+    /// memory location pointed to by `ptr`, respecting the given alignment.
+    ///
+    /// # Parameters
+    /// - `val`: The value to store.
+    /// - `ptr`: The pointer to the memory location where the value will be stored.
+    /// - `align`: The alignment of the memory location.
+    fn build_store(&mut self, val: Self::Value, ptr: Self::Value, align: Align);
+
     /// Construct a backend value from a constant scalar and its TIR type.
     /// This is used to create constant values in the backend.
     ///

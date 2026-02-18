@@ -235,6 +235,21 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
         load_inst
     }
 
+    /// Build a store instruction to write a value into memory at the given pointer.
+    ///
+    /// Emits an LLVM `store` instruction with the specified alignment. The pointer
+    /// must point to a memory location large enough to hold the value.
+    fn build_store(&mut self, val: Self::Value, ptr: Self::Value, align: Align) {
+        let store_inst = self
+            .ll_builder
+            .build_store(ptr.into_pointer_value(), val)
+            .expect("Failed to build store instruction");
+
+        store_inst
+            .set_alignment(align.bytes() as u32)
+            .expect("Failed to set alignment on store");
+    }
+
     fn build_fneg(&mut self, val: Self::Value) -> Self::Value {
         assert!(val.get_type().is_float_type());
         self.ll_builder
