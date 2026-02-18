@@ -46,6 +46,16 @@ impl<'ctx> LayoutCtx<'ctx> {
         };
 
         let (size, align, backend_repr) = match &**ty {
+            ty::TirTy::Unit => {
+                // Unit / void is a zero-sized type.
+                // Size is 0 bytes, alignment is 1 byte, backend representation is Memory
+                // (ZSTs are always Memory because they have no scalar value).
+                (
+                    Size::ZERO,
+                    AbiAndPrefAlign::new(1, 1),
+                    BackendRepr::Memory,
+                )
+            }
             ty::TirTy::I8 => scalar(Primitive::I8),
             ty::TirTy::I16 => scalar(Primitive::I16),
             ty::TirTy::I32 => scalar(Primitive::I32),

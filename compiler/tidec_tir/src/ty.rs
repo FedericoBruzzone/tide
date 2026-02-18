@@ -5,7 +5,7 @@ use tidec_utils::interner::Interner;
 pub enum TirTy<I: Interner> {
     // The `()` type. This is equivalent to a
     // zero-sized type or void in some languages.
-    // Unit,
+    Unit,
 
     // Signed integers
     I8,
@@ -57,10 +57,16 @@ impl<I: Interner> TirTy<I> {
         )
     }
 
+    /// Returns `true` if this type is the unit type (`()`).
+    pub fn is_unit(&self) -> bool {
+        matches!(self, TirTy::Unit)
+    }
+
     /// This function returns true if the type is a sized type.
     /// That is, it has a known size at compile time.
     pub fn is_sized(&self) -> bool {
         match self {
+            TirTy::Unit => true,
             TirTy::I8
             | TirTy::I16
             | TirTy::I32
@@ -91,6 +97,7 @@ pub enum Mutability {
 impl<I: Interner> PartialEq for TirTy<I> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (TirTy::Unit, TirTy::Unit) => true,
             (TirTy::I8, TirTy::I8)
             | (TirTy::I16, TirTy::I16)
             | (TirTy::I32, TirTy::I32)
@@ -127,6 +134,7 @@ impl<I: Interner> Eq for TirTy<I> {}
 impl<I: Interner> Hash for TirTy<I> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
+            TirTy::Unit => 17.hash(state),
             TirTy::I8 => 0.hash(state),
             TirTy::I16 => 1.hash(state),
             TirTy::I32 => 2.hash(state),

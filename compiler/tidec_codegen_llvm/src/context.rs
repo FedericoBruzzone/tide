@@ -82,16 +82,24 @@ impl<'ctx> PreDefineCodegenMethods<'ctx> for CodegenCtx<'ctx, '_> {
     ) {
         let name = lir_body_metadata.name.as_str();
 
-        let ret_ty = lir_body_ret_and_args[RETURN_LOCAL].ty.into_basic_type(self);
+        let ret_ty_tir = lir_body_ret_and_args[RETURN_LOCAL].ty;
         let formal_param_tys = lir_body_ret_and_args.as_slice()[RETURN_LOCAL.next()..]
             .iter()
             .map(|local_data| local_data.ty.into_basic_type_metadata(self))
             .collect::<Vec<_>>();
-        let fn_ty = self.declare_fn(
-            ret_ty,
-            formal_param_tys.as_slice(),
-            lir_body_metadata.is_varargs,
-        );
+
+        // If the return type is Unit (void), use void_type for the LLVM function type.
+        // Otherwise, use the basic type for the return type.
+        let fn_ty = if ret_ty_tir.is_unit() {
+            self.declare_void_fn(formal_param_tys.as_slice(), lir_body_metadata.is_varargs)
+        } else {
+            let ret_ty = ret_ty_tir.into_basic_type(self);
+            self.declare_fn(
+                ret_ty,
+                formal_param_tys.as_slice(),
+                lir_body_metadata.is_varargs,
+            )
+        };
         let linkage = lir_body_metadata.linkage.into_linkage();
         let calling_convention = lir_body_metadata.call_conv.into_call_conv();
         let fn_val = self.ll_module.add_function(name, fn_ty, Some(linkage));
@@ -222,6 +230,18 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
         };
 
         fn_ty
+    }
+
+    /// Declare a function with a `void` return type.
+    ///
+    /// This is separate from `declare_fn` because LLVM's void type is not
+    /// a `BasicTypeEnum` — it can only appear as a function return type.
+    fn declare_void_fn(
+        &self,
+        param_tys: &[BasicMetadataTypeEnum<'ll>],
+        is_varargs: bool,
+    ) -> FunctionType<'ll> {
+        self.ll_context.void_type().fn_type(param_tys, is_varargs)
     }
 
     /// Creates a target machine for code generation.
