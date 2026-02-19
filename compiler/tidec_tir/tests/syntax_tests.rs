@@ -179,3 +179,156 @@ fn statement_assign_with_place() {
         assert!(matches!(stmt, Statement::Assign(_)));
     });
 }
+
+// ---- Terminator construction tests ----
+
+#[test]
+fn terminator_return() {
+    let term: Terminator<'_> = Terminator::Return;
+    assert!(matches!(term, Terminator::Return));
+}
+
+#[test]
+fn terminator_goto() {
+    let target = BasicBlock::new(3);
+    let term: Terminator<'_> = Terminator::Goto { target };
+    match term {
+        Terminator::Goto { target: t } => assert_eq!(t, BasicBlock::new(3)),
+        _ => panic!("Expected Goto variant"),
+    }
+}
+
+#[test]
+fn terminator_unreachable() {
+    let term: Terminator<'_> = Terminator::Unreachable;
+    assert!(matches!(term, Terminator::Unreachable));
+}
+
+#[test]
+fn terminator_switch_int() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let discr = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 1,
+                size: std::num::NonZero::new(4).unwrap(),
+            })),
+            i32_ty,
+        ));
+        let targets = SwitchTargets::new(
+            vec![(0, BasicBlock::new(1)), (1, BasicBlock::new(2))],
+            BasicBlock::new(3),
+        );
+        let term = Terminator::SwitchInt { discr, targets };
+        assert!(matches!(term, Terminator::SwitchInt { .. }));
+    });
+}
+
+// ---- SwitchTargets tests ----
+
+#[test]
+fn switch_targets_new() {
+    let targets = SwitchTargets::new(
+        vec![(10, BasicBlock::new(1)), (20, BasicBlock::new(2))],
+        BasicBlock::new(0),
+    );
+    assert_eq!(targets.len(), 2);
+    assert!(!targets.is_empty());
+    assert_eq!(targets.otherwise, BasicBlock::new(0));
+}
+
+#[test]
+fn switch_targets_if_then() {
+    let targets = SwitchTargets::if_then(BasicBlock::new(1), BasicBlock::new(2));
+    assert_eq!(targets.len(), 1);
+    assert_eq!(targets.otherwise, BasicBlock::new(2));
+    let arms: Vec<_> = targets.iter().collect();
+    assert_eq!(arms.len(), 1);
+    assert_eq!(arms[0], (1, BasicBlock::new(1)));
+}
+
+#[test]
+fn switch_targets_empty() {
+    let targets = SwitchTargets::new(vec![], BasicBlock::new(5));
+    assert!(targets.is_empty());
+    assert_eq!(targets.len(), 0);
+    assert_eq!(targets.otherwise, BasicBlock::new(5));
+}
+
+#[test]
+fn switch_targets_iter() {
+    let targets = SwitchTargets::new(
+        vec![
+            (100, BasicBlock::new(1)),
+            (200, BasicBlock::new(2)),
+            (300, BasicBlock::new(3)),
+        ],
+        BasicBlock::new(0),
+    );
+    let arms: Vec<_> = targets.iter().collect();
+    assert_eq!(arms.len(), 3);
+    assert_eq!(arms[0], (100, BasicBlock::new(1)));
+    assert_eq!(arms[1], (200, BasicBlock::new(2)));
+    assert_eq!(arms[2], (300, BasicBlock::new(3)));
+}
+
+// ---- BinaryOp comparison tests ----
+
+#[test]
+fn comparison_ops_return_bool_type() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let bool_ty = ctx.intern_ty(ty::TirTy::Bool);
+
+        let ops = [
+            BinaryOp::Eq,
+            BinaryOp::Ne,
+            BinaryOp::Lt,
+            BinaryOp::Le,
+            BinaryOp::Gt,
+            BinaryOp::Ge,
+        ];
+        for op in &ops {
+            let result_ty = op.ty(&ctx, i32_ty, i32_ty);
+            assert_eq!(
+                result_ty, bool_ty,
+                "{:?} should return Bool, got {:?}",
+                op, result_ty
+            );
+        }
+    });
+}
+
+#[test]
+fn arithmetic_ops_return_lhs_type() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+
+        let ops = [BinaryOp::Add, BinaryOp::Sub, BinaryOp::Mul, BinaryOp::Div];
+        for op in &ops {
+            let result_ty = op.ty(&ctx, i32_ty, i32_ty);
+            assert_eq!(
+                result_ty, i32_ty,
+                "{:?} should return I32, got {:?}",
+                op, result_ty
+            );
+        }
+    });
+}
+
+// ---- BasicBlock tests ----
+
+#[test]
+fn basic_block_entry_is_zero() {
+    assert_eq!(ENTRY_BLOCK, BasicBlock::new(0));
+}
+
+#[test]
+fn basic_block_idx_trait() {
+    let mut bb = BasicBlock::new(2);
+    assert_eq!(bb.idx(), 2);
+    bb.incr();
+    assert_eq!(bb.idx(), 3);
+    bb.incr_by(5);
+    assert_eq!(bb.idx(), 8);
+}

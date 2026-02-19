@@ -1,4 +1,4 @@
-use tidec_abi::layout::BackendRepr;
+use tidec_abi::layout::{BackendRepr, Primitive};
 use tidec_abi::size_and_align::Size;
 use tidec_abi::target::{BackendKind, TirTarget};
 use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
@@ -74,5 +74,35 @@ fn pointer_layout_is_8_bytes_on_64bit() {
         layout.size,
         Size::from_bytes(8),
         "pointer should be 8 bytes on 64-bit target"
+    );
+}
+
+#[test]
+fn bool_layout_is_1_byte() {
+    let (target, args, arena) = make_ctx();
+    let intern_ctx = InternCtx::new(&arena);
+    let tir_ctx = TirCtx::new(&target, &args, &intern_ctx);
+
+    let bool_ty = tir_ctx.intern_ty(ty::TirTy::Bool);
+    let layout_ctx = LayoutCtx::new(tir_ctx);
+    let layout = layout_ctx.compute_layout(bool_ty);
+
+    assert_eq!(layout.size, Size::from_bytes(1), "Bool should be 1 byte");
+}
+
+#[test]
+fn bool_layout_has_scalar_u8_repr() {
+    let (target, args, arena) = make_ctx();
+    let intern_ctx = InternCtx::new(&arena);
+    let tir_ctx = TirCtx::new(&target, &args, &intern_ctx);
+
+    let bool_ty = tir_ctx.intern_ty(ty::TirTy::Bool);
+    let layout_ctx = LayoutCtx::new(tir_ctx);
+    let layout = layout_ctx.compute_layout(bool_ty);
+
+    assert!(
+        matches!(layout.backend_repr, BackendRepr::Scalar(Primitive::U8)),
+        "Bool should have Scalar(U8) backend repr, got {:?}",
+        layout.backend_repr
     );
 }
