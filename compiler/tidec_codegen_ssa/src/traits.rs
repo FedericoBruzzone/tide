@@ -269,6 +269,63 @@ pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
     /// Build an unconditional branch to the given basic block.
     fn build_unconditional_br(&mut self, target: Self::BasicBlock);
 
+    /// Build a conditional branch based on a boolean value.
+    ///
+    /// If `cond` is true (non-zero), execution continues at `then_bb`;
+    /// otherwise it continues at `else_bb`.
+    ///
+    /// The `cond` value must be an `i1` (boolean) in the backend.
+    fn build_conditional_br(
+        &mut self,
+        cond: Self::Value,
+        then_bb: Self::BasicBlock,
+        else_bb: Self::BasicBlock,
+    );
+
+    /// Build a multi-way switch instruction.
+    ///
+    /// The discriminant `discr` is compared against each `(value, block)` pair.
+    /// If a match is found, control transfers to the corresponding block.
+    /// Otherwise, control transfers to `otherwise`.
+    fn build_switch(
+        &mut self,
+        discr: Self::Value,
+        otherwise: Self::BasicBlock,
+        cases: &[(u128, Self::BasicBlock)],
+    );
+
+    /// Build an `unreachable` instruction.
+    ///
+    /// This signals to the backend that control flow never reaches this
+    /// point. If it does at runtime, the behaviour is undefined.
+    fn build_unreachable(&mut self);
+
+    /// Build an integer comparison instruction.
+    ///
+    /// Compares `lhs` and `rhs` using the given predicate string and returns
+    /// an `i1` (boolean) result.
+    ///
+    /// The `signed` flag indicates whether the comparison is signed or unsigned,
+    /// which matters for `Lt`, `Le`, `Gt`, `Ge` (but not for `Eq`/`Ne`).
+    fn build_icmp(
+        &mut self,
+        op: tidec_tir::syntax::BinaryOp,
+        lhs: Self::Value,
+        rhs: Self::Value,
+        signed: bool,
+    ) -> Self::Value;
+
+    /// Build a floating-point comparison instruction.
+    ///
+    /// Compares `lhs` and `rhs` using the given predicate and returns
+    /// an `i1` (boolean) result. Uses ordered comparisons (NaN → false).
+    fn build_fcmp(
+        &mut self,
+        op: tidec_tir::syntax::BinaryOp,
+        lhs: Self::Value,
+        rhs: Self::Value,
+    ) -> Self::Value;
+
     /// Build a GEP (GetElementPtr) instruction for accessing a struct field.
     ///
     /// Given a pointer to a struct in memory, this computes the address of the

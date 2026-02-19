@@ -189,6 +189,20 @@ pub enum BinaryOp {
     /// Floating-point division by zero is safe, and does not need guards.
     // TODO(bruzzone): tide might add checks for UBs in Div.
     Div,
+
+    // ── Comparison Operators ──────────────────────────────────────
+    /// Equality comparison (`==`). Returns `Bool`.
+    Eq,
+    /// Inequality comparison (`!=`). Returns `Bool`.
+    Ne,
+    /// Less-than comparison (`<`). Returns `Bool`.
+    Lt,
+    /// Less-than-or-equal comparison (`<=`). Returns `Bool`.
+    Le,
+    /// Greater-than comparison (`>`). Returns `Bool`.
+    Gt,
+    /// Greater-than-or-equal comparison (`>=`). Returns `Bool`.
+    Ge,
 }
 
 impl BinaryOp {
@@ -209,6 +223,13 @@ impl BinaryOp {
             | BinaryOp::Mul
             | BinaryOp::MulUnchecked
             | BinaryOp::Div => lhs_ty,
+            // Comparison operators always return Bool.
+            BinaryOp::Eq
+            | BinaryOp::Ne
+            | BinaryOp::Lt
+            | BinaryOp::Le
+            | BinaryOp::Gt
+            | BinaryOp::Ge => tir_ctx.intern_ty(crate::ty::TirTy::Bool),
         }
     }
 }
@@ -471,6 +492,34 @@ pub enum Terminator<'ctx> {
     /// return place (`Local(0)`) to the place specified, via a `Call` terminator
     /// by the caller.
     Return,
+    /// An unconditional branch to the target basic block.
+    ///
+    /// This is the simplest control-flow transfer: execution continues at
+    /// `target` without any condition.
+    Goto {
+        /// The basic block to branch to.
+        target: BasicBlock,
+    },
+    /// A multi-way branch based on an integer discriminant.
+    ///
+    /// The discriminant value is compared against each target in `targets`.
+    /// If a match is found, execution continues at the corresponding basic
+    /// block. Otherwise, execution continues at the `otherwise` block.
+    ///
+    /// This is used for `if/else` (2-way switch on a `Bool`), C `switch`
+    /// statements, and any multi-way branching pattern.
+    SwitchInt {
+        /// The discriminant operand whose value is tested.
+        discr: Operand<'ctx>,
+        /// The switch targets: a list of `(value, BasicBlock)` arms plus
+        /// a mandatory `otherwise` (default) block.
+        targets: SwitchTargets,
+    },
+    /// Indicates unreachable code.
+    ///
+    /// If execution ever reaches this terminator, it is undefined behaviour.
+    /// The backend emits an LLVM `unreachable` instruction.
+    Unreachable,
     /// A function call.
     ///
     /// This terminator represents a function call, which transfers control to the
@@ -485,6 +534,57 @@ pub enum Terminator<'ctx> {
         /// The basic block to continue execution at after the call.
         target: BasicBlock,
     },
+}
+
+#[derive(Debug, Clone)]
+/// Targets for a `SwitchInt` terminator.
+///
+/// Contains a list of `(value, BasicBlock)` arms and a mandatory `otherwise`
+/// (default) target. The discriminant is compared against each value in order;
+/// if no match is found, control transfers to `otherwise`.
+///
+/// # Constructing
+///
+/// Use [`SwitchTargets::new`] to create an instance, or [`SwitchTargets::if_then`]
+/// for the common two-way boolean branch (`if / else`).
+pub struct SwitchTargets {
+    /// List of `(discriminant_value, target_block)` arms.
+    pub values: Vec<(u128, BasicBlock)>,
+    /// The default target when no arm matches.
+    pub otherwise: BasicBlock,
+}
+
+impl SwitchTargets {
+    /// Create a new `SwitchTargets` with the given arms and default block.
+    pub fn new(values: Vec<(u128, BasicBlock)>, otherwise: BasicBlock) -> Self {
+        SwitchTargets { values, otherwise }
+    }
+
+    /// Convenience constructor for a boolean `if/else` branch.
+    ///
+    /// `then_bb` is taken when the discriminant is `1` (true),
+    /// `else_bb` is taken otherwise.
+    pub fn if_then(then_bb: BasicBlock, else_bb: BasicBlock) -> Self {
+        SwitchTargets {
+            values: vec![(1, then_bb)],
+            otherwise: else_bb,
+        }
+    }
+
+    /// Returns an iterator over `(value, BasicBlock)` arms.
+    pub fn iter(&self) -> impl Iterator<Item = (u128, BasicBlock)> + '_ {
+        self.values.iter().copied()
+    }
+
+    /// Returns the number of explicit arms (excluding `otherwise`).
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Returns `true` if there are no explicit arms.
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

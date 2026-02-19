@@ -8,12 +8,12 @@ use tidec_tir::{
     body::TirBody,
     syntax::{
         BasicBlock, BasicBlockData, BinaryOp, Local, Operand, Place, Projection, RETURN_LOCAL,
-        RValue, Statement, Terminator, UnaryOp,
+        RValue, Statement, SwitchTargets, Terminator, UnaryOp,
     },
 };
 use tidec_utils::idx::Idx;
 use tidec_utils::index_vec::IdxVec;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, trace};
 
 use crate::{
     tir::{LocalRef, OperandRef},
@@ -301,6 +301,19 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                     builder.build_udiv(lhs, rhs)
                 }
             }
+            // Comparison operators
+            BinaryOp::Eq
+            | BinaryOp::Ne
+            | BinaryOp::Lt
+            | BinaryOp::Le
+            | BinaryOp::Gt
+            | BinaryOp::Ge => {
+                if is_float {
+                    builder.build_fcmp(bin_op.clone(), lhs, rhs)
+                } else {
+                    builder.build_icmp(bin_op.clone(), lhs, rhs, is_signed)
+                }
+            }
         }
     }
 
@@ -334,6 +347,16 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         debug!("Codegen terminator: {:?}", term);
         match term {
             Terminator::Return => self.codegen_return_terminator(builder),
+            Terminator::Goto { target } => {
+                let be_bb = self.get_or_insert_bb(*target);
+                builder.build_unconditional_br(be_bb);
+            }
+            Terminator::SwitchInt { discr, targets } => {
+                self.codegen_switch_int_terminator(builder, discr, targets);
+            }
+            Terminator::Unreachable => {
+                builder.build_unreachable();
+            }
             Terminator::Call {
                 func,
                 args,
@@ -435,6 +458,38 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         // Jump to the target basic block
         let be_target_bb = self.get_or_insert_bb(target);
         builder.build_unconditional_br(be_target_bb);
+    }
+
+    /// Codegen a `SwitchInt` terminator.
+    ///
+    /// If there is exactly one arm (e.g. a boolean `if/else`), we emit a
+    /// conditional branch for efficiency. Otherwise we emit a full `switch`
+    /// instruction.
+    fn codegen_switch_int_terminator(
+        &mut self,
+        builder: &mut B,
+        discr: &Operand<'ctx>,
+        targets: &SwitchTargets,
+    ) {
+        let discr_ref = self.codegen_operand(builder, discr);
+        let discr_val = discr_ref.operand_val.immediate();
+
+        let otherwise_bb = self.get_or_insert_bb(targets.otherwise);
+
+        if targets.len() == 1 {
+            // Boolean-style conditional branch (if / else).
+            trace!("Optimizing switch with if/else statement");
+            let (_, then_bb_idx) = targets.values[0];
+            let then_bb = self.get_or_insert_bb(then_bb_idx);
+            builder.build_conditional_br(discr_val, then_bb, otherwise_bb);
+        } else {
+            // General multi-way switch.
+            let cases: Vec<(u128, B::BasicBlock)> = targets
+                .iter()
+                .map(|(val, bb)| (val, self.get_or_insert_bb(bb)))
+                .collect();
+            builder.build_switch(discr_val, otherwise_bb, &cases);
+        }
     }
 
     /// Codegen a return terminator.

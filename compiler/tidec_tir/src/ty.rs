@@ -7,6 +7,15 @@ pub enum TirTy<I: Interner> {
     // zero-sized type or void in some languages.
     Unit,
 
+    /// Boolean type. Represents a 1-bit truth value (`true` / `false`).
+    ///
+    /// At the LLVM level this maps to `i1`. At the ABI/layout level it is
+    /// stored as a `U8` scalar (1 byte, same alignment as `u8`), but only
+    /// the low bit is meaningful.
+    ///
+    /// Comparison operators (`Eq`, `Ne`, `Lt`, …) produce values of this type.
+    Bool,
+
     // Signed integers
     I8,
     I16,
@@ -57,6 +66,11 @@ impl<I: Interner> TirTy<I> {
         )
     }
 
+    /// Returns `true` if this type is the boolean type.
+    pub fn is_bool(&self) -> bool {
+        matches!(self, TirTy::Bool)
+    }
+
     /// Returns `true` if this type is the unit type (`()`).
     pub fn is_unit(&self) -> bool {
         matches!(self, TirTy::Unit)
@@ -67,6 +81,7 @@ impl<I: Interner> TirTy<I> {
     pub fn is_sized(&self) -> bool {
         match self {
             TirTy::Unit => true,
+            TirTy::Bool => true,
             TirTy::I8
             | TirTy::I16
             | TirTy::I32
@@ -98,6 +113,7 @@ impl<I: Interner> PartialEq for TirTy<I> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (TirTy::Unit, TirTy::Unit) => true,
+            (TirTy::Bool, TirTy::Bool) => true,
             (TirTy::I8, TirTy::I8)
             | (TirTy::I16, TirTy::I16)
             | (TirTy::I32, TirTy::I32)
@@ -135,31 +151,32 @@ impl<I: Interner> Hash for TirTy<I> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
             TirTy::Unit => 0.hash(state),
-            TirTy::I8 => 1.hash(state),
-            TirTy::I16 => 2.hash(state),
-            TirTy::I32 => 3.hash(state),
-            TirTy::I64 => 4.hash(state),
-            TirTy::I128 => 5.hash(state),
-            TirTy::U8 => 6.hash(state),
-            TirTy::U16 => 7.hash(state),
-            TirTy::U32 => 8.hash(state),
-            TirTy::U64 => 9.hash(state),
-            TirTy::U128 => 10.hash(state),
-            TirTy::F16 => 11.hash(state),
-            TirTy::F32 => 12.hash(state),
-            TirTy::F64 => 13.hash(state),
-            TirTy::F128 => 14.hash(state),
+            TirTy::Bool => 1.hash(state),
+            TirTy::I8 => 2.hash(state),
+            TirTy::I16 => 3.hash(state),
+            TirTy::I32 => 4.hash(state),
+            TirTy::I64 => 5.hash(state),
+            TirTy::I128 => 6.hash(state),
+            TirTy::U8 => 7.hash(state),
+            TirTy::U16 => 8.hash(state),
+            TirTy::U32 => 9.hash(state),
+            TirTy::U64 => 10.hash(state),
+            TirTy::U128 => 11.hash(state),
+            TirTy::F16 => 12.hash(state),
+            TirTy::F32 => 13.hash(state),
+            TirTy::F64 => 14.hash(state),
+            TirTy::F128 => 15.hash(state),
             TirTy::RawPtr(ty, mutability) => {
-                15.hash(state);
+                16.hash(state);
                 ty.hash(state);
                 mutability.hash(state);
             }
             // TirTy::FnPty { param_tys, ret_ty } => {
-            //     16.hash(state);
+            //     17.hash(state);
             //     param_tys.hash(state);
             //     ret_ty.hash(state);
             // }
-            TirTy::Metadata => 17.hash(state),
+            TirTy::Metadata => 18.hash(state),
         }
     }
 }
