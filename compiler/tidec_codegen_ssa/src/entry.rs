@@ -1,14 +1,14 @@
 use crate::{
     tir::{OperandVal, PlaceRef},
-    traits::{CodegenMethods, FnAbiOf, LayoutOf},
+    traits::{BackendTypeOf, CodegenMethods, FnAbiOf, LayoutOf},
 };
 use tidec_abi::{calling_convention::function::PassMode, layout::TyAndLayout};
 use tidec_tir::{
     TirTy,
     body::TirBody,
     syntax::{
-        BasicBlock, BasicBlockData, BinaryOp, Local, Operand, Place, RETURN_LOCAL, RValue,
-        Statement, Terminator, UnaryOp,
+        BasicBlock, BasicBlockData, BinaryOp, Local, Operand, Place, Projection, RETURN_LOCAL,
+        RValue, Statement, Terminator, UnaryOp,
     },
 };
 use tidec_utils::idx::Idx;
@@ -125,11 +125,10 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                         }
                     }
                     None => {
-                        todo!(
-                            "Handle assignment to non-local places - we have to generate the place and the rvalue"
-                        );
-                        // let place_dest = self.codegen_place(bx, place.as_ref());
-                        // self.codegen_rvalue(bx, place_dest, rvalue);
+                        // The place has projections — we need to compute the
+                        // effective address and store the rvalue there.
+                        let place_ref = self.codegen_place(builder, place);
+                        self.codegen_rvalue(builder, place_ref, rvalue);
                     }
                 }
             }
@@ -146,9 +145,9 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
     /// live in memory rather than in SSA registers).
     pub fn codegen_rvalue(
         &mut self,
-        _builder: &mut B,
-        _place_ref: PlaceRef<'ctx, B::Value>,
-        _rvalue: &RValue<'ctx>,
+        builder: &mut B,
+        place_ref: PlaceRef<'ctx, B::Value>,
+        rvalue: &RValue<'ctx>,
     ) {
         let operand = self.codegen_rvalue_operand(builder, rvalue);
         match operand.operand_val {
@@ -473,7 +472,11 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
     /// For example, if the place is a ZST, it returns a ZST operand.
     /// If the place is already an operand ref, it returns it directly.
     /// Otherwise, it generates the place and loads the value from it.
-    fn codegen_consume(&mut self, builder: &mut B, place: &Place) -> OperandRef<'ctx, B::Value> {
+    fn codegen_consume(
+        &mut self,
+        builder: &mut B,
+        place: &Place<'ctx>,
+    ) -> OperandRef<'ctx, B::Value> {
         let layout = builder.ctx().layout_of(self.local_ty(place.local));
 
         if layout.is_zst() {
@@ -484,11 +487,14 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
             return operand_ref;
         }
 
-        let place_ref = self.codegen_place(place);
+        let place_ref = self.codegen_place(builder, place);
         builder.load_operand(&place_ref)
     }
 
-    fn try_codegen_consume_operand(&self, place: &Place) -> Option<OperandRef<'ctx, B::Value>> {
+    fn try_codegen_consume_operand(
+        &self,
+        place: &Place<'ctx>,
+    ) -> Option<OperandRef<'ctx, B::Value>> {
         match &self.locals[place.local] {
             LocalRef::OperandRef(operand_ref) => {
                 // TODO(bruzzone): we should handle projections here
@@ -498,14 +504,21 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         }
     }
 
-    #[instrument(level = "debug", skip(self))]
-    /// Codegen the given TIR place.
-    /// This function generates the place reference for the given TIR place.
-    /// It currently only handles local places.
-    // TODO(bruzzone): consider add the builder as parameter to this function
-    fn codegen_place(&mut self, place: &Place) -> PlaceRef<'ctx, B::Value> {
+    #[instrument(level = "debug", skip(self, builder))]
+    /// Codegen the given TIR place by resolving the base local and applying projections.
+    ///
+    /// This function starts from the base local's `PlaceRef` and then walks
+    /// through each projection in order, adjusting the pointer and layout
+    /// accordingly:
+    ///
+    /// - `Deref` — loads the pointer from the current place and uses it as
+    ///   the new base. The resulting type is the pointee type.
+    /// - `Field(idx, ty)` — emits a GEP to compute the address of a struct
+    ///   field. Requires the current place to have a memory layout.
+    /// - Other projections are not yet implemented and will panic.
+    fn codegen_place(&mut self, builder: &mut B, place: &Place<'ctx>) -> PlaceRef<'ctx, B::Value> {
         let local = place.local;
-        match &self.locals[local] {
+        let mut place_ref = match &self.locals[local] {
             LocalRef::PlaceRef(place_ref) => *place_ref,
             LocalRef::OperandRef(operand_ref) => {
                 panic!(
@@ -519,8 +532,93 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                     local
                 );
             }
+        };
+
+        // Apply each projection in sequence, adjusting the place reference.
+        for proj in &place.projection {
+            match proj {
+                Projection::Deref => {
+                    // The current place holds a pointer value. Load it, then
+                    // use the loaded pointer as the new base.
+                    //
+                    // Example: for `*p` where `p: *mut i32`:
+                    //   1. Load the pointer from `p`'s alloca → ptr_val
+                    //   2. The new place is ptr_val pointing to an i32
+                    debug!("Deref projection on type {:?}", place_ref.ty_layout.ty);
+
+                    // Determine the pointee type from the pointer type.
+                    // We copy the pointee `TirTy<'ctx>` out of the `RawPtr` variant
+                    // so that the result retains the `'ctx` lifetime rather than
+                    // being tied to a short-lived borrow.
+                    let pointee_ty = match &*place_ref.ty_layout.ty.0 {
+                        tidec_tir::ty::TirTy::RawPtr(pointee, _) => *pointee,
+                        _ => panic!(
+                            "Deref projection on non-pointer type: {:?}",
+                            place_ref.ty_layout.ty
+                        ),
+                    };
+                    let pointee_layout = builder.ctx().layout_of(pointee_ty);
+
+                    // Load the pointer value from the current place.
+                    let loaded_ptr = builder.load_operand(&place_ref);
+                    let ptr_val = loaded_ptr.operand_val.immediate();
+
+                    place_ref = PlaceRef {
+                        place_val: crate::tir::PlaceVal {
+                            value: ptr_val,
+                            align: pointee_layout.layout.align.abi,
+                        },
+                        ty_layout: pointee_layout,
+                    };
+                }
+                Projection::Field(field_idx, field_ty) => {
+                    // GEP into the struct to get the field address.
+                    //
+                    // The current place must be in memory (BackendRepr::Memory).
+                    // We emit a `getelementptr` to compute the field pointer.
+                    debug!(
+                        "Field projection: index={}, field_ty={:?}",
+                        field_idx, field_ty
+                    );
+
+                    let field_layout = builder.ctx().layout_of(*field_ty);
+
+                    // We need the LLVM type of the aggregate to compute the GEP.
+                    // For now, we use the type from the place's layout.
+                    // Note: build_struct_gep requires the struct type, which we get
+                    // from the place's type. This will need to be expanded when
+                    // struct types are fully supported.
+                    let aggregate_llty = builder.ctx().backend_type_of(place_ref.ty_layout.ty);
+                    let field_ptr = builder.build_struct_gep(
+                        aggregate_llty,
+                        place_ref.place_val.value,
+                        *field_idx as u32,
+                        &format!("field{}", field_idx),
+                    );
+
+                    place_ref = PlaceRef {
+                        place_val: crate::tir::PlaceVal {
+                            value: field_ptr,
+                            align: field_layout.layout.align.abi,
+                        },
+                        ty_layout: field_layout,
+                    };
+                }
+                Projection::Index(_local) => {
+                    todo!("Index projection requires array type support (Phase 4)")
+                }
+                Projection::ConstantIndex { .. } => {
+                    todo!("ConstantIndex projection requires array type support (Phase 4)")
+                }
+                Projection::Subslice { .. } => {
+                    todo!("Subslice projection requires slice type support (Phase 4)")
+                }
+                Projection::Downcast(_variant_idx) => {
+                    todo!("Downcast projection requires enum type support (Phase 4)")
+                }
+            }
         }
 
-        // TODO(bruzzone): handle projections
+        place_ref
     }
 }

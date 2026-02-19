@@ -21,6 +21,21 @@ pub trait LayoutOf<'ctx> {
     fn layout_of(&self, ty: TirTy<'ctx>) -> TyAndLayout<'ctx, TirTy<'ctx>>;
 }
 
+/// This trait converts a TIR type to the backend's type representation.
+///
+/// This is needed in the generic codegen layer (e.g., for GEP instructions
+/// in `codegen_place`) where the backend type is required but the specific
+/// backend is not known.
+pub trait BackendTypeOf<'ctx>: CodegenBackendTypes {
+    /// Convert a TIR type to the corresponding backend type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the type cannot be represented as a backend value type
+    /// (e.g., `TirTy::Unit` / void, which is not a value type).
+    fn backend_type_of(&self, ty: TirTy<'ctx>) -> Self::Type;
+}
+
 pub trait FnAbiOf<'ctx> {
     /// Returns the function ABI for the given return type and argument types.
     fn fn_abi_of(&self, ret_and_args: &IdxVec<Local, LocalData<'ctx>>) -> FnAbi<'ctx, TirTy<'ctx>>;
@@ -83,6 +98,7 @@ pub trait CodegenMethods<'ctx>:
     Sized
     + LayoutOf<'ctx>
     + FnAbiOf<'ctx>
+    + BackendTypeOf<'ctx>
     + CodegenBackendTypes
     + CodegenBackend
     + PreDefineCodegenMethods<'ctx>
@@ -252,6 +268,20 @@ pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
 
     /// Build an unconditional branch to the given basic block.
     fn build_unconditional_br(&mut self, target: Self::BasicBlock);
+
+    /// Build a GEP (GetElementPtr) instruction for accessing a struct field.
+    ///
+    /// Given a pointer to a struct in memory, this computes the address of the
+    /// field at `field_idx`. The `ty` parameter is the LLVM type of the struct.
+    ///
+    /// Returns a pointer to the field.
+    fn build_struct_gep(
+        &mut self,
+        ty: Self::Type,
+        ptr: Self::Value,
+        field_idx: u32,
+        name: &str,
+    ) -> Self::Value;
 
     /// Convert a function value to a pointer value.
     /// This is used when passing functions as arguments or storing them.

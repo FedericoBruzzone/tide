@@ -22,7 +22,7 @@ impl Local {
     }
 }
 
-impl From<Local> for Place {
+impl<'ctx> From<Local> for Place<'ctx> {
     fn from(val: Local) -> Self {
         Place {
             local: val,
@@ -55,16 +55,16 @@ impl From<Local> for Place {
 /// let s = S { a: 10 };
 /// let _ = s.a;                 // `s.a` is a place
 /// ```
-pub struct Place {
+pub struct Place<'ctx> {
     /// The base local variable from which this place starts.
     pub local: Local,
 
     /// A (possibly empty) list of projections representing access to subparts
     /// of the base local, such as fields or dereferenced pointers.
-    pub projection: Vec<Projection>,
+    pub projection: Vec<Projection<'ctx>>,
 }
 
-impl Place {
+impl<'ctx> Place<'ctx> {
     #[inline]
     pub fn try_local(&self) -> Option<Local> {
         if self.projection.is_empty() {
@@ -82,15 +82,54 @@ impl Place {
 /// from a base `Local`. Multiple projections can be chained to model
 /// deeply nested memory accesses.
 ///
-/// Common projection types include:
-/// - Field access (e.g., `.field`)
-/// - Dereferencing a pointer (e.g., `*p`)
-/// - Indexing into an array or slice (e.g., `[i]`)
+/// # Variants
 ///
-/// TODO: This enum is currently a placeholder and should be extended with
-/// specific variants such as `Field`, `Deref`, `Index`, etc.
-pub enum Projection {
-    Todo,
+/// - `Field` — Access a field of a struct or tuple by index.
+/// - `Deref` — Dereference a pointer (`*p`). The base must be a pointer type.
+/// - `Index` — Index into an array or slice using a local variable as the index.
+/// - `ConstantIndex` — Index into an array/slice with a compile-time constant offset.
+/// - `Subslice` — Extract a subslice from a slice or array.
+/// - `Downcast` — Select a specific variant of an enum (tagged union).
+pub enum Projection<'ctx> {
+    /// Access a field of a struct, tuple, or union.
+    ///
+    /// The `usize` is the zero-based field index, and the `TirTy` is the
+    /// type of the field (needed for layout computation during codegen).
+    Field(usize, TirTy<'ctx>),
+
+    /// Dereference a raw pointer. The base local must have type `RawPtr(T, _)`,
+    /// and the projection yields a place of type `T`.
+    Deref,
+
+    /// Index into an array or slice using a runtime index stored in a `Local`.
+    ///
+    /// The `Local` must hold an unsigned integer (index) value.
+    Index(Local),
+
+    /// Index into an array/slice with a compile-time constant offset.
+    ///
+    /// - `offset` — The constant index.
+    /// - `from_end` — If `true`, the index is counted from the end.
+    /// - `min_length` — The minimum required length of the array/slice.
+    ConstantIndex {
+        offset: u64,
+        from_end: bool,
+        min_length: u64,
+    },
+
+    /// Extract a contiguous subslice from an array or slice.
+    ///
+    /// - `from` — Start index (inclusive).
+    /// - `to` — End index (exclusive, or from-end if `from_end` is true).
+    /// - `from_end` — If `true`, `to` is counted from the end.
+    Subslice { from: u64, to: u64, from_end: bool },
+
+    /// Select a specific variant of an enum (tagged union).
+    ///
+    /// The `usize` is the variant index. This projection does not change
+    /// the pointer, but changes the type context so that subsequent `Field`
+    /// projections refer to the fields of that variant.
+    Downcast(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -185,7 +224,7 @@ pub enum Operand<'ctx> {
     /// It can be used to read from or write to that location.
     /// For example, loading a value from a variable or a field of a struct.
     /// Currently, this is a placeholder and should be expanded with more details.
-    Use(Place),
+    Use(Place<'ctx>),
     /// A constant value.
     ///
     /// Wraps a `ConstOperand`, which represents a constant known at compile-time.
@@ -417,7 +456,7 @@ pub struct LocalData<'ctx> {
 /// terminator of a basic block). It is a part of the block's execution.
 pub enum Statement<'ctx> {
     // An assignment statement. We use a Box to keep the size small.
-    Assign(Box<(Place, RValue<'ctx>)>),
+    Assign(Box<(Place<'ctx>, RValue<'ctx>)>),
 }
 
 #[derive(Debug, Clone)]
@@ -442,7 +481,7 @@ pub enum Terminator<'ctx> {
         /// The arguments to the function.
         args: Vec<Operand<'ctx>>,
         /// The destination for the return value.
-        destination: Place,
+        destination: Place<'ctx>,
         /// The basic block to continue execution at after the call.
         target: BasicBlock,
     },

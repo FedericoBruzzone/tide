@@ -28,8 +28,8 @@ use crate::tir::tir_body_metadata::{
 };
 use crate::tir::tir_ty::BasicTypesUtils;
 use tidec_codegen_ssa::traits::{
-    BuilderMethods, CodegenBackend, CodegenBackendTypes, CodegenMethods, DefineCodegenMethods,
-    FnAbiOf, LayoutOf, PreDefineCodegenMethods,
+    BackendTypeOf, BuilderMethods, CodegenBackend, CodegenBackendTypes, CodegenMethods,
+    DefineCodegenMethods, FnAbiOf, LayoutOf, PreDefineCodegenMethods,
 };
 use tidec_tir::body::{DefId, TirBody, TirBodyMetadata, TirUnit};
 use tidec_tir::syntax::{Local, LocalData, RETURN_LOCAL};
@@ -134,6 +134,16 @@ impl<'ll, 'ctx> DefineCodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
 impl<'ctx, 'll> LayoutOf<'ctx> for CodegenCtx<'ctx, 'll> {
     fn layout_of(&self, lir_ty: TirTy<'ctx>) -> TyAndLayout<'ctx, TirTy<'ctx>> {
         self.lir_ctx.layout_of(lir_ty)
+    }
+}
+
+impl<'ctx, 'll> BackendTypeOf<'ctx> for CodegenCtx<'ctx, 'll> {
+    /// Convert a TIR type to the corresponding LLVM `BasicTypeEnum`.
+    ///
+    /// Delegates to the `BasicTypesUtils::into_basic_type` method defined
+    /// in the `tir_ty` module.
+    fn backend_type_of(&self, ty: TirTy<'ctx>) -> BasicTypeEnum<'ll> {
+        ty.into_basic_type(self)
     }
 }
 

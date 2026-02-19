@@ -394,6 +394,24 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
             .expect("Failed to build unconditional branch");
     }
 
+    /// Build a GEP (GetElementPtr) instruction for accessing a struct field.
+    ///
+    /// Emits an LLVM `getelementptr inbounds` instruction to compute the
+    /// address of a struct field. The `ty` is the LLVM struct type, `ptr` points
+    /// to the struct in memory, and `field_idx` is the zero-based field index.
+    fn build_struct_gep(
+        &mut self,
+        ty: Self::Type,
+        ptr: Self::Value,
+        field_idx: u32,
+        name: &str,
+    ) -> Self::Value {
+        self.ll_builder
+            .build_struct_gep(ty, ptr.into_pointer_value(), field_idx, name)
+            .expect("Failed to build struct GEP")
+            .into()
+    }
+
     fn fn_to_ptr(&mut self, fn_value: Self::FunctionValue) -> Self::Value {
         // In LLVM's opaque pointer model, function values can be used directly as pointers
         fn_value.as_global_value().as_pointer_value().into()

@@ -160,5 +160,6 @@ impl<I: Interner> Hash for TirTy<I> {
             //     ret_ty.hash(state);
             // }
             TirTy::Metadata => 17.hash(state),
+        }
     }
 }
