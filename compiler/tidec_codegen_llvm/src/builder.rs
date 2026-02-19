@@ -394,6 +394,115 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
             .expect("Failed to build unconditional branch");
     }
 
+    fn build_conditional_br(
+        &mut self,
+        cond: Self::Value,
+        then_bb: Self::BasicBlock,
+        else_bb: Self::BasicBlock,
+    ) {
+        self.ll_builder
+            .build_conditional_branch(cond.into_int_value(), then_bb, else_bb)
+            .expect("Failed to build conditional branch");
+    }
+
+    fn build_switch(
+        &mut self,
+        discr: Self::Value,
+        otherwise: Self::BasicBlock,
+        cases: &[(u128, Self::BasicBlock)],
+    ) {
+        let int_val = discr.into_int_value();
+        let int_ty = int_val.get_type();
+        let ll_cases: Vec<_> = cases
+            .iter()
+            .map(|&(val, bb)| (int_ty.const_int(val as u64, false), bb))
+            .collect();
+        self.ll_builder
+            .build_switch(int_val, otherwise, &ll_cases)
+            .expect("Failed to build switch instruction");
+    }
+
+    fn build_unreachable(&mut self) {
+        self.ll_builder
+            .build_unreachable()
+            .expect("Failed to build unreachable");
+    }
+
+    fn build_icmp(
+        &mut self,
+        op: tidec_tir::syntax::BinaryOp,
+        lhs: Self::Value,
+        rhs: Self::Value,
+        signed: bool,
+    ) -> Self::Value {
+        use inkwell::IntPredicate;
+        use tidec_tir::syntax::BinaryOp;
+
+        let pred = match op {
+            BinaryOp::Eq => IntPredicate::EQ,
+            BinaryOp::Ne => IntPredicate::NE,
+            BinaryOp::Lt => {
+                if signed {
+                    IntPredicate::SLT
+                } else {
+                    IntPredicate::ULT
+                }
+            }
+            BinaryOp::Le => {
+                if signed {
+                    IntPredicate::SLE
+                } else {
+                    IntPredicate::ULE
+                }
+            }
+            BinaryOp::Gt => {
+                if signed {
+                    IntPredicate::SGT
+                } else {
+                    IntPredicate::UGT
+                }
+            }
+            BinaryOp::Ge => {
+                if signed {
+                    IntPredicate::SGE
+                } else {
+                    IntPredicate::UGE
+                }
+            }
+            _ => panic!("build_icmp called with non-comparison op: {:?}", op),
+        };
+
+        self.ll_builder
+            .build_int_compare(pred, lhs.into_int_value(), rhs.into_int_value(), "icmp")
+            .expect("Failed to build integer comparison")
+            .into()
+    }
+
+    fn build_fcmp(
+        &mut self,
+        op: tidec_tir::syntax::BinaryOp,
+        lhs: Self::Value,
+        rhs: Self::Value,
+    ) -> Self::Value {
+        use inkwell::FloatPredicate;
+        use tidec_tir::syntax::BinaryOp;
+
+        let pred = match op {
+            BinaryOp::Eq => FloatPredicate::OEQ,
+            BinaryOp::Ne => FloatPredicate::ONE,
+            BinaryOp::Lt => FloatPredicate::OLT,
+            BinaryOp::Le => FloatPredicate::OLE,
+            BinaryOp::Gt => FloatPredicate::OGT,
+            BinaryOp::Ge => FloatPredicate::OGE,
+            _ => panic!("build_fcmp called with non-comparison op: {:?}", op),
+        };
+
+        self.ll_builder
+            .build_float_compare(pred, lhs.into_float_value(), rhs.into_float_value(), "fcmp")
+            .expect("Failed to build float comparison")
+            .into()
+    }
+
     /// Build a GEP (GetElementPtr) instruction for accessing a struct field.
     ///
     /// Emits an LLVM `getelementptr inbounds` instruction to compute the

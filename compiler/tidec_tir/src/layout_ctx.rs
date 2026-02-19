@@ -56,6 +56,11 @@ impl<'ctx> LayoutCtx<'ctx> {
                     BackendRepr::Memory,
                 )
             }
+            ty::TirTy::Bool => {
+                // Bool is stored as a U8 scalar (1 byte) but only the low bit
+                // is meaningful. At the LLVM level this maps to `i1`.
+                scalar(Primitive::U8)
+            }
             ty::TirTy::I8 => scalar(Primitive::I8),
             ty::TirTy::I16 => scalar(Primitive::I16),
             ty::TirTy::I32 => scalar(Primitive::I32),

@@ -16,6 +16,7 @@ impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
     fn into_basic_type_metadata(self, ctx: &CodegenCtx<'ctx, 'll>) -> BasicMetadataTypeEnum<'ll> {
         match &**self {
             ty::TirTy::Unit => panic!("Unit/void type cannot be converted to BasicMetadataTypeEnum; handle void returns separately"),
+            ty::TirTy::Bool => BasicTypeEnum::IntType(ctx.ll_context.bool_type()).into(),
             ty::TirTy::I8 => BasicTypeEnum::IntType(ctx.ll_context.i8_type()).into(),
             ty::TirTy::I16 => BasicTypeEnum::IntType(ctx.ll_context.i16_type()).into(),
             ty::TirTy::I32 => BasicTypeEnum::IntType(ctx.ll_context.i32_type()).into(),
@@ -43,6 +44,7 @@ impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
     fn into_basic_type(self, ctx: &CodegenCtx<'ctx, 'll>) -> BasicTypeEnum<'ll> {
         match &**self {
             ty::TirTy::Unit => panic!("Unit/void type cannot be converted to BasicTypeEnum; handle void returns separately"),
+            ty::TirTy::Bool => BasicTypeEnum::IntType(ctx.ll_context.bool_type()),
             ty::TirTy::I8 => BasicTypeEnum::IntType(ctx.ll_context.i8_type()),
             ty::TirTy::I16 => BasicTypeEnum::IntType(ctx.ll_context.i16_type()),
             ty::TirTy::I32 => BasicTypeEnum::IntType(ctx.ll_context.i32_type()),
