@@ -13,4 +13,11 @@ pub fn llvm_codegen_lir_unit<'ctx>(tir_ctx: TirCtx<'ctx>, lir_unit: TirUnit<'ctx
 
     ctx.compile_tir_unit::<CodegenBuilder<'_, '_, 'ctx>>(lir_unit);
     ctx.emit_output();
+
+    // On Windows, dropping inkwell LLVM wrappers (`Context`, `Module`)
+    // can crash with `STATUS_ACCESS_VIOLATION` due to CRT-heap
+    // mismatches between the Rust binary and the LLVM DLL. We
+    // intentionally leak them. The OS reclaims the memory on exit.
+    std::mem::forget(ctx);
+    std::mem::forget(ll_context);
 }

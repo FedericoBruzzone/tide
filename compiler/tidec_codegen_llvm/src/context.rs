@@ -8,8 +8,7 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::targets::{
-    CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetData, TargetMachine,
-    TargetTriple,
+    CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple,
 };
 use inkwell::types::{BasicMetadataTypeEnum, BasicTypeEnum, FunctionType};
 use inkwell::values::{AnyValueEnum, BasicMetadataValueEnum, BasicValueEnum, FunctionValue};
@@ -182,36 +181,40 @@ impl<'ctx, 'll> FnAbiOf<'ctx> for CodegenCtx<'ctx, 'll> {
 }
 
 impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
-    #[instrument(skip(lir_ctx, ll_context, ll_module))]
+    /// Creates a new codegen context for the LLVM backend.
+    ///
+    /// Sets the target triple on the module. The data layout is set
+    /// later by [`create_target_machine`] before emitting output.
+    ///
+    /// On Windows, LLVM-allocated wrappers are intentionally leaked
+    /// with [`std::mem::forget`] to avoid `STATUS_ACCESS_VIOLATION`
+    /// crashes caused by CRT-heap mismatches between the Rust binary
+    /// and the LLVM shared library.
     pub fn new(
         lir_ctx: TirCtx<'ctx>,
         ll_context: &'ll Context,
         ll_module: Module<'ll>,
     ) -> CodegenCtx<'ctx, 'll> {
         let internal_target = lir_ctx.target();
-        {
-            let target_triple_string = internal_target.target_triple_string();
-            match target_triple_string {
-                Some(ref s) => {
-                    ll_module.set_triple(&TargetTriple::create(s));
-                    debug!("Using specified target triple: {:?}", s);
-                }
-                None => {
-                    let default_triple = TargetMachine::get_default_triple();
-                    ll_module.set_triple(&default_triple);
-                    debug!(
-                        "No target triple specified, using default: {:?}",
-                        default_triple.as_str()
-                    );
-                }
+
+        // Set the target triple on the module.
+        let triple_str = match internal_target.target_triple_string() {
+            Some(s) => s,
+            None => {
+                let default = TargetMachine::get_default_triple();
+                let s = default
+                    .as_str()
+                    .to_str()
+                    .unwrap_or("x86_64-pc-windows-msvc")
+                    .to_owned();
+                std::mem::forget(default);
+                debug!("Using default target triple: {:?}", s);
+                s
             }
-        }
-        {
-            // TODO: As TargetData contains methods to know the size, align, etc... for each LLVM type
-            // we could consider to store it in a context
-            let data_layout_string = internal_target.data_layout_string();
-            ll_module.set_data_layout(&TargetData::create(&data_layout_string).get_data_layout());
-        }
+        };
+        let created_triple = TargetTriple::create(&triple_str);
+        ll_module.set_triple(&created_triple);
+        std::mem::forget(created_triple);
 
         CodegenCtx {
             ll_context,
@@ -254,17 +257,36 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
         self.ll_context.void_type().fn_type(param_tys, is_varargs)
     }
 
-    /// Creates a target machine for code generation.
+    /// Creates a target machine for code generation and sets the module's
+    /// data layout from the `TargetMachine`.
     ///
-    /// Initializes all LLVM targets and creates a target machine based on
-    /// the module's target triple, host CPU, and CPU features.
+    /// Initialises the native LLVM target on the first call and creates
+    /// a target machine based on the module's target triple, host CPU,
+    /// and CPU features.
+    ///
+    /// On Windows, LLVM-allocated wrappers (`TargetTriple`,
+    /// `SupportStringRef`) are intentionally leaked with
+    /// [`std::mem::forget`] to avoid `STATUS_ACCESS_VIOLATION` crashes
+    /// caused by CRT-heap mismatches between the Rust binary and the
+    /// LLVM shared library.
     fn create_target_machine(&self) -> TargetMachine {
-        Target::initialize_all(&InitializationConfig::default());
+        Target::initialize_native(&InitializationConfig::default())
+            .expect("Failed to initialize native LLVM target");
+
+        // Copy strings out of LLVM-allocated wrappers and leak the
+        // wrappers to avoid the cross-heap free crash
         let triple = self.ll_module.get_triple();
-        let features = TargetMachine::get_host_cpu_features().to_string();
-        let cpu = TargetMachine::get_host_cpu_name().to_string();
+
+        let cpu_ref = TargetMachine::get_host_cpu_name();
+        let cpu = cpu_ref.to_string();
+        std::mem::forget(cpu_ref);
+
+        let features_ref = TargetMachine::get_host_cpu_features();
+        let features = features_ref.to_string();
+        std::mem::forget(features_ref);
+
         let target = Target::from_triple(&triple).expect("Failed to get target from triple");
-        target
+        let tm = target
             .create_target_machine(
                 &triple,
                 &cpu,
@@ -273,7 +295,25 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
                 RelocMode::PIC,
                 CodeModel::Default,
             )
-            .expect("Failed to create target machine")
+            .expect("Failed to create target machine");
+
+        // Leak the triple wrapper after we are done using it.
+        std::mem::forget(triple);
+
+        // Set the module's data layout from the TargetMachine so
+        // that it matches the target we are emitting for.
+        let target_data = tm.get_target_data();
+        let data_layout = target_data.get_data_layout();
+        self.ll_module.set_data_layout(&data_layout);
+        debug!(
+            "data_layout set from TargetMachine: {:?}",
+            self.ll_module.get_data_layout()
+        );
+        // Leak TargetData and DataLayout to avoid cross-heap free crash.
+        std::mem::forget(data_layout);
+        std::mem::forget(target_data);
+
+        tm
     }
 
     /// Returns the module name as a string.
@@ -295,6 +335,8 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
             .write_to_file(&self.ll_module, FileType::Object, Path::new(obj_path))
             .expect("Failed to write object file");
         debug!("Wrote object file to {}", obj_path);
+        // Leak the TargetMachine to avoid cross-heap crash
+        std::mem::forget(target_machine);
     }
 
     /// Emits an assembly file (`.s`) from the LLVM module.
@@ -305,13 +347,17 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
             .write_to_file(&self.ll_module, FileType::Assembly, Path::new(&asm_path))
             .expect("Failed to write assembly file");
         debug!("Wrote assembly file to {}", asm_path);
+        // Leak the TargetMachine to avoid cross-heap crash
+        std::mem::forget(target_machine);
     }
 
     /// Emits an LLVM IR file (`.ll`) from the LLVM module.
     fn emit_llvm_ir(&self) {
         let ir_path = format!("{}.ll", self.module_name());
-        std::fs::write(&ir_path, self.ll_module.print_to_string().to_string())
-            .expect("Failed to write LLVM IR file");
+        let llvm_string = self.ll_module.print_to_string();
+        let ir = llvm_string.to_string();
+        std::mem::forget(llvm_string);
+        std::fs::write(&ir_path, ir).expect("Failed to write LLVM IR file");
         debug!("Wrote LLVM IR file to {}", ir_path);
     }
 
@@ -426,11 +472,19 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
             self.define_body(lir_body);
         }
 
-        debug!("\n{}", self.ll_module.print_to_string().to_string());
+        let llvm_str = self.ll_module.print_to_string();
+        debug!("\n{}", llvm_str.to_string());
+        std::mem::forget(llvm_str);
     }
 
     fn emit_output(&self) {
-        assert_ne!(self.ll_module.get_triple(), TargetTriple::create(""));
+        let triple = self.ll_module.get_triple();
+        let triple_empty = triple.as_str().to_bytes().is_empty();
+        std::mem::forget(triple);
+        assert!(
+            !triple_empty,
+            "Module target triple must be set before emitting output"
+        );
 
         match self.tir_ctx().emit_kind() {
             EmitKind::Object => self.emit_object(),
