@@ -307,11 +307,18 @@ pub fn codegen_tir_body<'a, 'ctx: 'a, B: BuilderMethods<'a, 'ctx>>(
                 let layout = start_builder.ctx().layout_of(local_data.ty);
 
                 // Check if the local has to be stored in memory or can be an operand.
-                let local_ref = if layout.is_memory() {
-                    LocalRef::PlaceRef(PlaceRef::alloca(&mut start_builder, layout))
-                } else if layout.is_zst() {
+                // ZSTs must be checked first because they may have BackendRepr::Memory
+                // with size == 0 (e.g., Unit), which would otherwise trigger an alloca
+                // that asserts `!is_zst()`.
+                let local_ref = if layout.is_zst() {
                     // ZSTs do not need to be allocated.
                     LocalRef::OperandRef(OperandRef::new_zst(layout))
+                } else if layout.is_memory() || local_data.mutable {
+                    // Memory types need stack allocation (alloca).
+                    // Mutable locals also require alloca because they may be
+                    // reassigned across basic blocks — SSA operand refs are
+                    // write-once and cannot represent multiple definitions.
+                    LocalRef::PlaceRef(PlaceRef::alloca(&mut start_builder, layout))
                 } else {
                     LocalRef::PendingOperandRef
                 };
