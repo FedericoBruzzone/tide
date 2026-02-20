@@ -165,6 +165,11 @@ pub enum UnaryOp {
     Pos,
     /// Arithmetic negation.
     Neg,
+    /// Bitwise / logical NOT.
+    ///
+    /// For integers this is a bitwise complement (XOR with all-ones).
+    /// For booleans this is a logical negation (`true` ↔ `false`).
+    Not,
 }
 
 #[derive(Debug, Clone)]
@@ -189,6 +194,32 @@ pub enum BinaryOp {
     /// Floating-point division by zero is safe, and does not need guards.
     // TODO(bruzzone): tide might add checks for UBs in Div.
     Div,
+
+    // ── Remainder / Modulo ────────────────────────────────────────
+    /// Remainder (modulo).
+    ///
+    /// For integer types this is the C `%` operator (signed or unsigned
+    /// remainder, depending on operand signedness).
+    /// For floating-point types this maps to LLVM `frem`.
+    Rem,
+
+    // ── Bitwise Operations ────────────────────────────────────────
+    /// Bitwise AND (`&`).
+    BitAnd,
+    /// Bitwise OR (`|`).
+    BitOr,
+    /// Bitwise XOR (`^`).
+    BitXor,
+
+    // ── Shift Operations ─────────────────────────────────────────
+    /// Left shift (`<<`).
+    Shl,
+    /// Right shift (`>>`).
+    ///
+    /// The signedness of the shift is derived from the operand type:
+    /// signed types use an arithmetic shift (sign-extending), unsigned
+    /// types use a logical shift (zero-extending).
+    Shr,
 
     // ── Comparison Operators ──────────────────────────────────────
     /// Equality comparison (`==`). Returns `Bool`.
@@ -222,7 +253,13 @@ impl BinaryOp {
             | BinaryOp::SubUnchecked
             | BinaryOp::Mul
             | BinaryOp::MulUnchecked
-            | BinaryOp::Div => lhs_ty,
+            | BinaryOp::Div
+            | BinaryOp::Rem
+            | BinaryOp::BitAnd
+            | BinaryOp::BitOr
+            | BinaryOp::BitXor
+            | BinaryOp::Shl
+            | BinaryOp::Shr => lhs_ty,
             // Comparison operators always return Bool.
             BinaryOp::Eq
             | BinaryOp::Ne

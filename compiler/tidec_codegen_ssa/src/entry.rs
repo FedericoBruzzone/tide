@@ -196,6 +196,7 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                             builder.build_neg(operand_val.immediate())
                         }
                     }
+                    UnaryOp::Not => builder.build_not(operand_val.immediate()),
                 };
                 OperandRef::new_immediate(operand_val, ty_layout)
             }
@@ -299,6 +300,26 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                     builder.build_sdiv(lhs, rhs)
                 } else {
                     builder.build_udiv(lhs, rhs)
+                }
+            }
+            BinaryOp::Rem => {
+                if is_float {
+                    builder.build_frem(lhs, rhs)
+                } else if is_signed {
+                    builder.build_srem(lhs, rhs)
+                } else {
+                    builder.build_urem(lhs, rhs)
+                }
+            }
+            BinaryOp::BitAnd => builder.build_and(lhs, rhs),
+            BinaryOp::BitOr => builder.build_or(lhs, rhs),
+            BinaryOp::BitXor => builder.build_xor(lhs, rhs),
+            BinaryOp::Shl => builder.build_shl(lhs, rhs),
+            BinaryOp::Shr => {
+                if is_signed {
+                    builder.build_ashr(lhs, rhs)
+                } else {
+                    builder.build_lshr(lhs, rhs)
                 }
             }
             // Comparison operators
