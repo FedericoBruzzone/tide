@@ -226,6 +226,33 @@ pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
     /// Build an unsigned integer division instruction for the given values.
     fn build_udiv(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
 
+    /// Build a signed integer remainder instruction for the given values.
+    fn build_srem(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build an unsigned integer remainder instruction for the given values.
+    fn build_urem(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a floating-point remainder instruction for the given values.
+    fn build_frem(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+
+    /// Build a bitwise AND instruction for the given values.
+    fn build_and(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a bitwise OR instruction for the given values.
+    fn build_or(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a bitwise XOR instruction for the given values.
+    fn build_xor(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+
+    /// Build a left shift instruction for the given values.
+    fn build_shl(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build a logical (unsigned) right shift instruction for the given values.
+    fn build_lshr(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    /// Build an arithmetic (signed) right shift instruction for the given values.
+    fn build_ashr(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+
+    /// Build a bitwise NOT instruction for the given value.
+    ///
+    /// For integers this is the bitwise complement (XOR with all-ones).
+    /// For booleans this is a logical negation (XOR with `1`).
+    fn build_not(&mut self, val: Self::Value) -> Self::Value;
+
     /// Build a store instruction to store the given value to the given place reference.
     /// This is used to store a value to memory.
     /// The value is assumed to be of the same type as the place reference.

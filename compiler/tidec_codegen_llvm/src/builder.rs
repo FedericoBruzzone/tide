@@ -278,6 +278,71 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
     impl_arithmetic_ops!(int, build_udiv, build_int_unsigned_div, "udiv",
         "Unsigned integer division.\n\n`build_int_unsigned_div` is a helper on an LLVM IR builder wrapper that generates an unsigned integer division instruction.");
 
+    // Remainder / modulo operations
+    impl_arithmetic_ops!(int, build_srem, build_int_signed_rem, "srem",
+        "Signed integer remainder.\n\n`build_int_signed_rem` is a helper on an LLVM IR builder wrapper that generates a signed integer remainder instruction.");
+    impl_arithmetic_ops!(int, build_urem, build_int_unsigned_rem, "urem",
+        "Unsigned integer remainder.\n\n`build_int_unsigned_rem` is a helper on an LLVM IR builder wrapper that generates an unsigned integer remainder instruction.");
+    impl_arithmetic_ops!(float, build_frem, build_float_rem, "frem",
+        "Floating-point remainder.\n\n`build_float_rem` is a helper on an LLVM IR builder wrapper that generates a floating-point remainder instruction.");
+
+    // Bitwise operations
+    impl_arithmetic_ops!(int, build_and, build_and, "and",
+        "Bitwise AND.\n\n`build_and` is a helper on an LLVM IR builder wrapper that generates a bitwise AND instruction.");
+    impl_arithmetic_ops!(int, build_or, build_or, "or",
+        "Bitwise OR.\n\n`build_or` is a helper on an LLVM IR builder wrapper that generates a bitwise OR instruction.");
+    impl_arithmetic_ops!(int, build_xor, build_xor, "xor",
+        "Bitwise XOR.\n\n`build_xor` is a helper on an LLVM IR builder wrapper that generates a bitwise XOR instruction.");
+
+    // Shift operations
+    impl_arithmetic_ops!(int, build_shl, build_left_shift, "shl",
+        "Left shift.\n\n`build_left_shift` is a helper on an LLVM IR builder wrapper that generates a left shift instruction.");
+
+    /// Logical (unsigned) right shift.
+    ///
+    /// Uses `build_right_shift` with `sign_extend = false` to produce a
+    /// logical shift that fills vacated bits with zeros.
+    fn build_lshr(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        self.ll_builder
+            .build_right_shift(
+                lhs.into_int_value(),
+                rhs.into_int_value(),
+                false, // sign_extend = false → logical shift
+                "lshr",
+            )
+            .unwrap()
+            .into()
+    }
+
+    /// Arithmetic (signed) right shift.
+    ///
+    /// Uses `build_right_shift` with `sign_extend = true` to produce an
+    /// arithmetic shift that preserves the sign bit.
+    fn build_ashr(&mut self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        assert!(lhs.get_type().is_int_type() && rhs.get_type().is_int_type());
+        self.ll_builder
+            .build_right_shift(
+                lhs.into_int_value(),
+                rhs.into_int_value(),
+                true, // sign_extend = true → arithmetic shift
+                "ashr",
+            )
+            .unwrap()
+            .into()
+    }
+
+    /// Bitwise NOT (complement).
+    ///
+    /// Emits an LLVM `xor %val, -1` instruction, which flips every bit.
+    fn build_not(&mut self, val: Self::Value) -> Self::Value {
+        assert!(val.get_type().is_int_type());
+        self.ll_builder
+            .build_not(val.into_int_value(), "not")
+            .unwrap()
+            .into()
+    }
+
     // Float arithmetic operations
     impl_arithmetic_ops!(float, build_fadd, build_float_add, "fadd",
         "Floating-point addition.\n\n`build_float_add` is a helper on an LLVM IR builder wrapper that generates a floating-point addition instruction.");
