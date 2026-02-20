@@ -253,6 +253,71 @@ pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
     /// For booleans this is a logical negation (XOR with `1`).
     fn build_not(&mut self, val: Self::Value) -> Self::Value;
 
+    // ── Cast / conversion instructions ───────────────────────────
+
+    /// Truncate an integer value to a narrower integer type.
+    ///
+    /// The destination type must be strictly narrower than the source.
+    /// Maps to LLVM `trunc`.
+    fn build_trunc(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Zero-extend an integer value to a wider integer type.
+    ///
+    /// The destination type must be strictly wider than the source.
+    /// High bits are filled with zeros. Maps to LLVM `zext`.
+    fn build_zext(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Sign-extend an integer value to a wider integer type.
+    ///
+    /// The destination type must be strictly wider than the source.
+    /// High bits are filled with copies of the sign bit. Maps to LLVM `sext`.
+    fn build_sext(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Truncate a floating-point value to a narrower float type.
+    ///
+    /// E.g. `f64` → `f32`. Maps to LLVM `fptrunc`.
+    fn build_fptrunc(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Extend a floating-point value to a wider float type.
+    ///
+    /// E.g. `f32` → `f64`. Maps to LLVM `fpext`.
+    fn build_fpext(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Convert a signed integer to a floating-point value.
+    ///
+    /// Maps to LLVM `sitofp`.
+    fn build_sitofp(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Convert an unsigned integer to a floating-point value.
+    ///
+    /// Maps to LLVM `uitofp`.
+    fn build_uitofp(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Convert a floating-point value to a signed integer.
+    ///
+    /// Maps to LLVM `fptosi`.
+    fn build_fptosi(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Convert a floating-point value to an unsigned integer.
+    ///
+    /// Maps to LLVM `fptoui`.
+    fn build_fptoui(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Convert an integer value to a pointer.
+    ///
+    /// Maps to LLVM `inttoptr`.
+    fn build_inttoptr(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Convert a pointer to an integer value.
+    ///
+    /// Maps to LLVM `ptrtoint`.
+    fn build_ptrtoint(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
+    /// Reinterpret the bits of a value as a different type (same bit width).
+    ///
+    /// Maps to LLVM `bitcast`.
+    fn build_bitcast(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value;
+
     /// Build a store instruction to store the given value to the given place reference.
     /// This is used to store a value to memory.
     /// The value is assumed to be of the same type as the place reference.

@@ -7,8 +7,8 @@ use tidec_tir::{
     TirTy,
     body::TirBody,
     syntax::{
-        BasicBlock, BasicBlockData, BinaryOp, Local, Operand, Place, Projection, RETURN_LOCAL,
-        RValue, Statement, SwitchTargets, Terminator, UnaryOp,
+        BasicBlock, BasicBlockData, BinaryOp, CastKind, Local, Operand, Place, Projection,
+        RETURN_LOCAL, RValue, Statement, SwitchTargets, Terminator, UnaryOp,
     },
 };
 use tidec_utils::idx::Idx;
@@ -231,7 +231,80 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                 let result_layout = ctx.layout_of(result_ty);
                 OperandRef::new_immediate(operand_val, result_layout)
             }
+            RValue::Cast(cast_kind, operand, dest_ty) => {
+                self.codegen_cast(builder, cast_kind, operand, *dest_ty)
+            }
         }
+    }
+
+    /// Codegen a type cast (`RValue::Cast`).
+    ///
+    /// Selects the appropriate LLVM cast instruction based on `CastKind`,
+    /// source type, and destination type.
+    fn codegen_cast(
+        &mut self,
+        builder: &mut B,
+        cast_kind: &CastKind,
+        operand: &Operand<'ctx>,
+        dest_ty: TirTy<'ctx>,
+    ) -> OperandRef<'ctx, B::Value> {
+        let src_ref = self.codegen_operand(builder, operand);
+        assert!(src_ref.operand_val.is_immediate());
+        let src_val = src_ref.operand_val.immediate();
+        let src_ty = src_ref.ty_layout.ty;
+
+        let ctx = builder.ctx();
+        let dest_layout = ctx.layout_of(dest_ty);
+        let dest_llty = ctx.backend_type_of(dest_ty);
+
+        let cast_val = match cast_kind {
+            CastKind::IntToInt => {
+                let src_bits = src_ref.ty_layout.size.bits();
+                let dst_bits = dest_layout.size.bits();
+                if src_bits == dst_bits {
+                    // Same width — reinterpret (e.g. i32 ↔ u32). No-op in LLVM.
+                    src_val
+                } else if src_bits > dst_bits {
+                    builder.build_trunc(src_val, dest_llty)
+                } else if src_ty.is_signed_integer() {
+                    builder.build_sext(src_val, dest_llty)
+                } else {
+                    builder.build_zext(src_val, dest_llty)
+                }
+            }
+            CastKind::FloatToFloat => {
+                let src_bits = src_ref.ty_layout.size.bits();
+                let dst_bits = dest_layout.size.bits();
+                if src_bits > dst_bits {
+                    builder.build_fptrunc(src_val, dest_llty)
+                } else {
+                    builder.build_fpext(src_val, dest_llty)
+                }
+            }
+            CastKind::IntToFloat => {
+                if src_ty.is_signed_integer() {
+                    builder.build_sitofp(src_val, dest_llty)
+                } else {
+                    builder.build_uitofp(src_val, dest_llty)
+                }
+            }
+            CastKind::FloatToInt => {
+                if dest_ty.is_signed_integer() {
+                    builder.build_fptosi(src_val, dest_llty)
+                } else {
+                    builder.build_fptoui(src_val, dest_llty)
+                }
+            }
+            CastKind::PtrToInt => builder.build_ptrtoint(src_val, dest_llty),
+            CastKind::IntToPtr => builder.build_inttoptr(src_val, dest_llty),
+            CastKind::Bitcast => builder.build_bitcast(src_val, dest_llty),
+            CastKind::PtrToPtr => {
+                // Under LLVM's opaque pointer model, ptr→ptr is a no-op.
+                src_val
+            }
+        };
+
+        OperandRef::new_immediate(cast_val, dest_layout)
     }
 
     /// Codegen a scalar binary operation.
@@ -681,16 +754,16 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                     };
                 }
                 Projection::Index(_local) => {
-                    todo!("Index projection requires array type support (Phase 4)")
+                    todo!("Index projection requires array type support")
                 }
                 Projection::ConstantIndex { .. } => {
-                    todo!("ConstantIndex projection requires array type support (Phase 4)")
+                    todo!("ConstantIndex projection requires array type support")
                 }
                 Projection::Subslice { .. } => {
-                    todo!("Subslice projection requires slice type support (Phase 4)")
+                    todo!("Subslice projection requires slice type support")
                 }
                 Projection::Downcast(_variant_idx) => {
-                    todo!("Downcast projection requires enum type support (Phase 4)")
+                    todo!("Downcast projection requires enum type support")
                 }
             }
         }

@@ -133,6 +133,35 @@ pub enum Projection<'ctx> {
 }
 
 #[derive(Debug, Clone)]
+/// The kind of a type cast operation.
+///
+/// Each variant specifies a category of cast; the codegen layer selects the
+/// precise LLVM instruction based on source/destination type widths and
+/// signedness.
+pub enum CastKind {
+    /// Integer → integer: truncate, zero-extend, or sign-extend.
+    ///
+    /// The correct LLVM instruction (`trunc`, `zext`, `sext`) is chosen at
+    /// codegen time by comparing source and destination bit widths and the
+    /// signedness of the source type.
+    IntToInt,
+    /// Float → float: truncate (`fptrunc`) or extend (`fpext`).
+    FloatToFloat,
+    /// Integer → float: `sitofp` (signed) or `uitofp` (unsigned).
+    IntToFloat,
+    /// Float → integer: `fptosi` (signed) or `fptoui` (unsigned).
+    FloatToInt,
+    /// Pointer → integer (`ptrtoint`).
+    PtrToInt,
+    /// Integer → pointer (`inttoptr`).
+    IntToPtr,
+    /// Reinterpret the raw bits of a value as a different type (`bitcast`).
+    Bitcast,
+    /// Pointer → pointer (no-op under LLVM's opaque-pointer model).
+    PtrToPtr,
+}
+
+#[derive(Debug, Clone)]
 /// Represents a right-hand side (RValue) in TIR during code generation.
 ///
 /// An `RValue` is something that can be **evaluated to produce a value**.
@@ -157,6 +186,13 @@ pub enum RValue<'ctx> {
     ///
     /// For example, addition (`x + y`), subtraction (`x - y`), multiplication (`x * y`), etc.
     BinaryOp(BinaryOp, Operand<'ctx>, Operand<'ctx>),
+    /// A type cast applied to an operand.
+    ///
+    /// The `CastKind` selects the category of cast (int↔int, float↔float,
+    /// int↔float, ptr↔int, bitcast, ptr↔ptr). The `TirTy` is the
+    /// destination type. The codegen layer picks the precise LLVM
+    /// instruction based on source/destination widths and signedness.
+    Cast(CastKind, Operand<'ctx>, TirTy<'ctx>),
 }
 
 #[derive(Debug, Clone)]
