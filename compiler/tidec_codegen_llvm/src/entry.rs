@@ -21,3 +21,30 @@ pub fn llvm_codegen_lir_unit<'ctx>(tir_ctx: TirCtx<'ctx>, lir_unit: TirUnit<'ctx
     std::mem::forget(ctx);
     std::mem::forget(ll_context);
 }
+
+/// Compile a TIR unit through the full LLVM codegen pipeline and return the
+/// resulting LLVM IR as a string.
+///
+/// This is the same pipeline as [`llvm_codegen_lir_unit`] but instead of
+/// emitting to a file it returns the textual IR. Useful for testing the
+/// codegen output without requiring a linker.
+pub fn llvm_codegen_to_ir_string<'ctx>(tir_ctx: TirCtx<'ctx>, lir_unit: TirUnit<'ctx>) -> String {
+    let ll_context = Context::create();
+    let ll_module = ll_context.create_module(&lir_unit.metadata.unit_name);
+    let ctx = CodegenCtx::new(tir_ctx, &ll_context, ll_module);
+
+    ctx.compile_tir_unit::<CodegenBuilder<'_, '_, 'ctx>>(lir_unit);
+
+    let llvm_string = ctx.ll_module.print_to_string();
+    let ir = llvm_string.to_string();
+
+    // On Windows, dropping inkwell LLVM wrappers (`Context`, `Module`,
+    // `LLVMString`) can crash with `STATUS_ACCESS_VIOLATION` due to
+    // CRT-heap mismatches between the Rust binary and the LLVM DLL.
+    // We intentionally leak them. The OS reclaims the memory on exit.
+    std::mem::forget(llvm_string);
+    std::mem::forget(ctx);
+    std::mem::forget(ll_context);
+
+    ir
+}
