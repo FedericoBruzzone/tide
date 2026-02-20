@@ -124,4 +124,10 @@ impl Align {
     pub const fn bytes(&self) -> u64 {
         self.0
     }
+
+    /// Returns the alignment in bits.
+    #[inline]
+    pub const fn bits(&self) -> u64 {
+        self.0 * 8
+    }
 }
