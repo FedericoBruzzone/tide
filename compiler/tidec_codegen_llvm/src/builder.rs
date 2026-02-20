@@ -343,6 +343,111 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
             .into()
     }
 
+    // ── Cast / conversion instructions ───────────────────────────
+
+    /// Truncate an integer to a narrower integer type.
+    fn build_trunc(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_int_truncate(val.into_int_value(), dest_ty.into_int_type(), "trunc")
+            .unwrap()
+            .into()
+    }
+
+    /// Zero-extend an integer to a wider integer type.
+    fn build_zext(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_int_z_extend(val.into_int_value(), dest_ty.into_int_type(), "zext")
+            .unwrap()
+            .into()
+    }
+
+    /// Sign-extend an integer to a wider integer type.
+    fn build_sext(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_int_s_extend(val.into_int_value(), dest_ty.into_int_type(), "sext")
+            .unwrap()
+            .into()
+    }
+
+    /// Truncate a float to a narrower float type.
+    fn build_fptrunc(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_float_trunc(val.into_float_value(), dest_ty.into_float_type(), "fptrunc")
+            .unwrap()
+            .into()
+    }
+
+    /// Extend a float to a wider float type.
+    fn build_fpext(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_float_ext(val.into_float_value(), dest_ty.into_float_type(), "fpext")
+            .unwrap()
+            .into()
+    }
+
+    /// Signed integer → float.
+    fn build_sitofp(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_signed_int_to_float(val.into_int_value(), dest_ty.into_float_type(), "sitofp")
+            .unwrap()
+            .into()
+    }
+
+    /// Unsigned integer → float.
+    fn build_uitofp(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_unsigned_int_to_float(val.into_int_value(), dest_ty.into_float_type(), "uitofp")
+            .unwrap()
+            .into()
+    }
+
+    /// Float → signed integer.
+    fn build_fptosi(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_float_to_signed_int(val.into_float_value(), dest_ty.into_int_type(), "fptosi")
+            .unwrap()
+            .into()
+    }
+
+    /// Float → unsigned integer.
+    fn build_fptoui(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_float_to_unsigned_int(val.into_float_value(), dest_ty.into_int_type(), "fptoui")
+            .unwrap()
+            .into()
+    }
+
+    /// Integer → pointer.
+    fn build_inttoptr(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_int_to_ptr(
+                val.into_int_value(),
+                dest_ty.into_pointer_type(),
+                "inttoptr",
+            )
+            .unwrap()
+            .into()
+    }
+
+    /// Pointer → integer.
+    fn build_ptrtoint(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_ptr_to_int(
+                val.into_pointer_value(),
+                dest_ty.into_int_type(),
+                "ptrtoint",
+            )
+            .unwrap()
+            .into()
+    }
+
+    /// Bitcast (reinterpret bits).
+    fn build_bitcast(&mut self, val: Self::Value, dest_ty: Self::Type) -> Self::Value {
+        self.ll_builder
+            .build_bit_cast(val, dest_ty, "bitcast")
+            .unwrap()
+    }
+
     // Float arithmetic operations
     impl_arithmetic_ops!(float, build_fadd, build_float_add, "fadd",
         "Floating-point addition.\n\n`build_float_add` is a helper on an LLVM IR builder wrapper that generates a floating-point addition instruction.");

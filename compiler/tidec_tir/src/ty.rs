@@ -66,6 +66,29 @@ impl<I: Interner> TirTy<I> {
         )
     }
 
+    /// Returns `true` if this type is any integer type (signed or unsigned),
+    /// excluding `Bool`.
+    pub fn is_integer(&self) -> bool {
+        matches!(
+            self,
+            TirTy::I8
+                | TirTy::I16
+                | TirTy::I32
+                | TirTy::I64
+                | TirTy::I128
+                | TirTy::U8
+                | TirTy::U16
+                | TirTy::U32
+                | TirTy::U64
+                | TirTy::U128
+        )
+    }
+
+    /// Returns `true` if this type is a raw pointer type.
+    pub fn is_pointer(&self) -> bool {
+        matches!(self, TirTy::RawPtr(_, _))
+    }
+
     /// Returns `true` if this type is the boolean type.
     pub fn is_bool(&self) -> bool {
         matches!(self, TirTy::Bool)
