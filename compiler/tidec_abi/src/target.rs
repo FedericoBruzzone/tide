@@ -126,25 +126,30 @@ pub struct TargetDataLayout {
 }
 
 impl Default for TargetDataLayout {
+    /// Default data layout for a 64-bit little-endian target (e.g. x86_64).
+    ///
+    /// All alignment values are in **bytes** (matching the `AbiAndPrefAlign`
+    /// contract). The LLVM data-layout string generation converts them to
+    /// bits as required by the LLVM specification.
     fn default() -> Self {
         TargetDataLayout {
-            endianess: Endianess::Big,
-            int1_align: AbiAndPrefAlign::new(8, 8),
-            int8_align: AbiAndPrefAlign::new(8, 8),
-            int16_align: AbiAndPrefAlign::new(16, 16),
-            int32_align: AbiAndPrefAlign::new(32, 32),
-            int64_align: AbiAndPrefAlign::new(32, 64),
-            int128_align: AbiAndPrefAlign::new(32, 64),
-            float16_align: AbiAndPrefAlign::new(16, 16),
-            float32_align: AbiAndPrefAlign::new(32, 32),
-            float64_align: AbiAndPrefAlign::new(64, 64),
-            float128_align: AbiAndPrefAlign::new(128, 128),
+            endianess: Endianess::Little,
+            int1_align: AbiAndPrefAlign::new(1, 1),
+            int8_align: AbiAndPrefAlign::new(1, 1),
+            int16_align: AbiAndPrefAlign::new(2, 2),
+            int32_align: AbiAndPrefAlign::new(4, 4),
+            int64_align: AbiAndPrefAlign::new(4, 8),
+            int128_align: AbiAndPrefAlign::new(4, 8),
+            float16_align: AbiAndPrefAlign::new(2, 2),
+            float32_align: AbiAndPrefAlign::new(4, 4),
+            float64_align: AbiAndPrefAlign::new(8, 8),
+            float128_align: AbiAndPrefAlign::new(16, 16),
             pointer_size: Size::from_bits(64),
-            pointer_align: AbiAndPrefAlign::new(64, 64),
-            aggregate_align: AbiAndPrefAlign::new(0, 64),
+            pointer_align: AbiAndPrefAlign::new(8, 8),
+            aggregate_align: AbiAndPrefAlign::new(0, 8),
             vector_align: vec![
-                (Size::from_bits(64), AbiAndPrefAlign::new(64, 64)),
-                (Size::from_bits(128), AbiAndPrefAlign::new(128, 128)),
+                (Size::from_bits(64), AbiAndPrefAlign::new(8, 8)),
+                (Size::from_bits(128), AbiAndPrefAlign::new(16, 16)),
             ],
             instruction_address_space: AddressSpace::DATA,
         }
@@ -171,9 +176,11 @@ impl TargetDataLayout {
 
     /// For example, for x86_64-unknown-linux-gnu, the data layout string could be:
     /// `e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128`
+    ///
+    /// All sizes and alignments in the LLVM data-layout string are in **bits**.
     pub fn as_llvm_datalayout_string(&self) -> String {
         let format_align = |name: &str, align: &AbiAndPrefAlign| {
-            format!("-{}:{}:{}", name, align.abi.bytes(), align.pref.bytes())
+            format!("-{}:{}:{}", name, align.abi.bits(), align.pref.bits())
         };
 
         let mut s = String::new();
@@ -185,12 +192,12 @@ impl TargetDataLayout {
             'E'
         });
 
-        // Add pointer and integer alignments
+        // Add pointer and integer alignments (sizes and alignments in bits)
         s.push_str(&format!(
             "-p:{}:{}:{}",
-            self.pointer_size.bytes(),
-            self.pointer_align.abi.bytes(),
-            self.pointer_align.pref.bytes()
+            self.pointer_size.bits(),
+            self.pointer_align.abi.bits(),
+            self.pointer_align.pref.bits()
         ));
 
         // Format for integer types
@@ -210,13 +217,13 @@ impl TargetDataLayout {
         // Aggregate alignment
         s.push_str(&format_align("a", &self.aggregate_align));
 
-        // Vector alignments
+        // Vector alignments (sizes in bits)
         for (size, align) in &self.vector_align {
             s.push_str(&format!(
                 "-v{}:{}:{}",
-                size.bytes(),
-                align.abi.bytes(),
-                align.pref.bytes()
+                size.bits(),
+                align.abi.bits(),
+                align.pref.bits()
             ));
         }
 
