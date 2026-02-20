@@ -316,6 +316,223 @@ fn arithmetic_ops_return_lhs_type() {
     });
 }
 
+// ---- Remainder, Bitwise, Shift ops return lhs type ----
+
+#[test]
+fn remainder_op_returns_lhs_type() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let result_ty = BinaryOp::Rem.ty(&ctx, i32_ty, i32_ty);
+        assert_eq!(result_ty, i32_ty);
+    });
+}
+
+#[test]
+fn bitwise_ops_return_lhs_type() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let ops = [BinaryOp::BitAnd, BinaryOp::BitOr, BinaryOp::BitXor];
+        for op in &ops {
+            let result_ty = op.ty(&ctx, i32_ty, i32_ty);
+            assert_eq!(
+                result_ty, i32_ty,
+                "{:?} should return I32, got {:?}",
+                op, result_ty
+            );
+        }
+    });
+}
+
+#[test]
+fn shift_ops_return_lhs_type() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let ops = [BinaryOp::Shl, BinaryOp::Shr];
+        for op in &ops {
+            let result_ty = op.ty(&ctx, i32_ty, i32_ty);
+            assert_eq!(
+                result_ty, i32_ty,
+                "{:?} should return I32, got {:?}",
+                op, result_ty
+            );
+        }
+    });
+}
+
+#[test]
+fn unary_not_variant() {
+    let op = UnaryOp::Not;
+    assert!(matches!(op, UnaryOp::Not));
+}
+
+// ---- UnaryOp position and negation variant tests ----
+
+#[test]
+fn unary_pos_variant() {
+    let op = UnaryOp::Pos;
+    assert!(matches!(op, UnaryOp::Pos));
+}
+
+#[test]
+fn unary_neg_variant() {
+    let op = UnaryOp::Neg;
+    assert!(matches!(op, UnaryOp::Neg));
+}
+
+// ---- Remainder with different type families ----
+
+#[test]
+fn remainder_unsigned_returns_lhs_type() {
+    with_ctx(|ctx| {
+        let u32_ty = ctx.intern_ty(ty::TirTy::U32);
+        let result_ty = BinaryOp::Rem.ty(&ctx, u32_ty, u32_ty);
+        assert_eq!(result_ty, u32_ty);
+    });
+}
+
+#[test]
+fn remainder_float_returns_lhs_type() {
+    with_ctx(|ctx| {
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+        let result_ty = BinaryOp::Rem.ty(&ctx, f64_ty, f64_ty);
+        assert_eq!(result_ty, f64_ty);
+    });
+}
+
+// ---- Shift ops with unsigned type ----
+
+#[test]
+fn shift_ops_unsigned_return_lhs_type() {
+    with_ctx(|ctx| {
+        let u64_ty = ctx.intern_ty(ty::TirTy::U64);
+        let ops = [BinaryOp::Shl, BinaryOp::Shr];
+        for op in &ops {
+            let result_ty = op.ty(&ctx, u64_ty, u64_ty);
+            assert_eq!(
+                result_ty, u64_ty,
+                "{:?} should return U64, got {:?}",
+                op, result_ty
+            );
+        }
+    });
+}
+
+// ---- Unchecked arithmetic ops return lhs type ----
+
+#[test]
+fn unchecked_arithmetic_ops_return_lhs_type() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let ops = [
+            BinaryOp::AddUnchecked,
+            BinaryOp::SubUnchecked,
+            BinaryOp::MulUnchecked,
+        ];
+        for op in &ops {
+            let result_ty = op.ty(&ctx, i32_ty, i32_ty);
+            assert_eq!(
+                result_ty, i32_ty,
+                "{:?} should return I32, got {:?}",
+                op, result_ty
+            );
+        }
+    });
+}
+
+// ---- RValue construction tests ----
+
+#[test]
+fn rvalue_binary_op_rem_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let lhs = Operand::Const(ConstOperand::Value(ConstValue::ZST, i32_ty));
+        let rhs = Operand::Const(ConstOperand::Value(ConstValue::ZST, i32_ty));
+        let rv = RValue::BinaryOp(BinaryOp::Rem, lhs, rhs);
+        assert!(matches!(rv, RValue::BinaryOp(BinaryOp::Rem, _, _)));
+    });
+}
+
+#[test]
+fn rvalue_binary_op_bitwise_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let lhs = Operand::Const(ConstOperand::Value(ConstValue::ZST, i32_ty));
+        let rhs = Operand::Const(ConstOperand::Value(ConstValue::ZST, i32_ty));
+        let ops = [BinaryOp::BitAnd, BinaryOp::BitOr, BinaryOp::BitXor];
+        for op in ops {
+            let rv = RValue::BinaryOp(op.clone(), lhs.clone(), rhs.clone());
+            assert!(matches!(rv, RValue::BinaryOp(_, _, _)));
+        }
+    });
+}
+
+#[test]
+fn rvalue_binary_op_shift_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let lhs = Operand::Const(ConstOperand::Value(ConstValue::ZST, i32_ty));
+        let rhs = Operand::Const(ConstOperand::Value(ConstValue::ZST, i32_ty));
+        let rv_shl = RValue::BinaryOp(BinaryOp::Shl, lhs.clone(), rhs.clone());
+        let rv_shr = RValue::BinaryOp(BinaryOp::Shr, lhs, rhs);
+        assert!(matches!(rv_shl, RValue::BinaryOp(BinaryOp::Shl, _, _)));
+        assert!(matches!(rv_shr, RValue::BinaryOp(BinaryOp::Shr, _, _)));
+    });
+}
+
+#[test]
+fn rvalue_unary_op_not_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let operand = Operand::Const(ConstOperand::Value(ConstValue::ZST, i32_ty));
+        let rv = RValue::UnaryOp(UnaryOp::Not, operand);
+        assert!(matches!(rv, RValue::UnaryOp(UnaryOp::Not, _)));
+    });
+}
+
+// ---- Comparison ops with unsigned types ----
+
+#[test]
+fn comparison_ops_unsigned_return_bool() {
+    with_ctx(|ctx| {
+        let u32_ty = ctx.intern_ty(ty::TirTy::U32);
+        let bool_ty = ctx.intern_ty(ty::TirTy::Bool);
+        let ops = [
+            BinaryOp::Eq,
+            BinaryOp::Ne,
+            BinaryOp::Lt,
+            BinaryOp::Le,
+            BinaryOp::Gt,
+            BinaryOp::Ge,
+        ];
+        for op in &ops {
+            let result_ty = op.ty(&ctx, u32_ty, u32_ty);
+            assert_eq!(
+                result_ty, bool_ty,
+                "{:?} on U32 should return Bool, got {:?}",
+                op, result_ty
+            );
+        }
+    });
+}
+
+// ---- Bitwise ops with different integer widths ----
+
+#[test]
+fn bitwise_ops_i64_return_lhs_type() {
+    with_ctx(|ctx| {
+        let i64_ty = ctx.intern_ty(ty::TirTy::I64);
+        let ops = [BinaryOp::BitAnd, BinaryOp::BitOr, BinaryOp::BitXor];
+        for op in &ops {
+            let result_ty = op.ty(&ctx, i64_ty, i64_ty);
+            assert_eq!(
+                result_ty, i64_ty,
+                "{:?} should return I64, got {:?}",
+                op, result_ty
+            );
+        }
+    });
+}
+
 // ---- BasicBlock tests ----
 
 #[test]
@@ -331,4 +548,226 @@ fn basic_block_idx_trait() {
     assert_eq!(bb.idx(), 3);
     bb.incr_by(5);
     assert_eq!(bb.idx(), 8);
+}
+
+// ---- CastKind tests ----
+
+#[test]
+fn cast_kind_int_to_int_variant() {
+    let kind = CastKind::IntToInt;
+    assert!(matches!(kind, CastKind::IntToInt));
+}
+
+#[test]
+fn cast_kind_float_to_float_variant() {
+    let kind = CastKind::FloatToFloat;
+    assert!(matches!(kind, CastKind::FloatToFloat));
+}
+
+#[test]
+fn cast_kind_int_to_float_variant() {
+    let kind = CastKind::IntToFloat;
+    assert!(matches!(kind, CastKind::IntToFloat));
+}
+
+#[test]
+fn cast_kind_float_to_int_variant() {
+    let kind = CastKind::FloatToInt;
+    assert!(matches!(kind, CastKind::FloatToInt));
+}
+
+#[test]
+fn cast_kind_ptr_to_int_variant() {
+    let kind = CastKind::PtrToInt;
+    assert!(matches!(kind, CastKind::PtrToInt));
+}
+
+#[test]
+fn cast_kind_int_to_ptr_variant() {
+    let kind = CastKind::IntToPtr;
+    assert!(matches!(kind, CastKind::IntToPtr));
+}
+
+#[test]
+fn cast_kind_bitcast_variant() {
+    let kind = CastKind::Bitcast;
+    assert!(matches!(kind, CastKind::Bitcast));
+}
+
+#[test]
+fn cast_kind_ptr_to_ptr_variant() {
+    let kind = CastKind::PtrToPtr;
+    assert!(matches!(kind, CastKind::PtrToPtr));
+}
+
+// ---- RValue::Cast construction tests ----
+
+#[test]
+fn rvalue_cast_int_to_int_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let i64_ty = ctx.intern_ty(ty::TirTy::I64);
+        let operand = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 42,
+                size: std::num::NonZero::new(4).unwrap(),
+            })),
+            i32_ty,
+        ));
+        let rvalue = RValue::Cast(CastKind::IntToInt, operand, i64_ty);
+        assert!(matches!(rvalue, RValue::Cast(CastKind::IntToInt, _, _)));
+    });
+}
+
+#[test]
+fn rvalue_cast_float_to_float_construction() {
+    with_ctx(|ctx| {
+        let f32_ty = ctx.intern_ty(ty::TirTy::F32);
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+        let operand = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0x40490FDB, // ~pi as f32 bits
+                size: std::num::NonZero::new(4).unwrap(),
+            })),
+            f32_ty,
+        ));
+        let rvalue = RValue::Cast(CastKind::FloatToFloat, operand, f64_ty);
+        assert!(matches!(rvalue, RValue::Cast(CastKind::FloatToFloat, _, _)));
+    });
+}
+
+#[test]
+fn rvalue_cast_int_to_float_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+        let operand = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 10,
+                size: std::num::NonZero::new(4).unwrap(),
+            })),
+            i32_ty,
+        ));
+        let rvalue = RValue::Cast(CastKind::IntToFloat, operand, f64_ty);
+        assert!(matches!(rvalue, RValue::Cast(CastKind::IntToFloat, _, _)));
+    });
+}
+
+#[test]
+fn rvalue_cast_float_to_int_construction() {
+    with_ctx(|ctx| {
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let operand = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0x4024000000000000, // 10.0 as f64 bits
+                size: std::num::NonZero::new(8).unwrap(),
+            })),
+            f64_ty,
+        ));
+        let rvalue = RValue::Cast(CastKind::FloatToInt, operand, i32_ty);
+        assert!(matches!(rvalue, RValue::Cast(CastKind::FloatToInt, _, _)));
+    });
+}
+
+#[test]
+fn rvalue_cast_int_to_ptr_construction() {
+    with_ctx(|ctx| {
+        let u64_ty = ctx.intern_ty(ty::TirTy::U64);
+        let ptr_ty = ctx.intern_ty(ty::TirTy::RawPtr(u64_ty, ty::Mutability::Imm));
+        let operand = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0xDEAD_BEEF,
+                size: std::num::NonZero::new(8).unwrap(),
+            })),
+            u64_ty,
+        ));
+        let rvalue = RValue::Cast(CastKind::IntToPtr, operand, ptr_ty);
+        assert!(matches!(rvalue, RValue::Cast(CastKind::IntToPtr, _, _)));
+    });
+}
+
+#[test]
+fn rvalue_cast_ptr_to_int_construction() {
+    with_ctx(|ctx| {
+        let u64_ty = ctx.intern_ty(ty::TirTy::U64);
+        let ptr_ty = ctx.intern_ty(ty::TirTy::RawPtr(u64_ty, ty::Mutability::Imm));
+        let operand = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0xCAFE_BABE,
+                size: std::num::NonZero::new(8).unwrap(),
+            })),
+            ptr_ty,
+        ));
+        let rvalue = RValue::Cast(CastKind::PtrToInt, operand, u64_ty);
+        assert!(matches!(rvalue, RValue::Cast(CastKind::PtrToInt, _, _)));
+    });
+}
+
+#[test]
+fn rvalue_cast_bitcast_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let f32_ty = ctx.intern_ty(ty::TirTy::F32);
+        let operand = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0x42280000, // 42.0 as i32 bits
+                size: std::num::NonZero::new(4).unwrap(),
+            })),
+            i32_ty,
+        ));
+        let rvalue = RValue::Cast(CastKind::Bitcast, operand, f32_ty);
+        assert!(matches!(rvalue, RValue::Cast(CastKind::Bitcast, _, _)));
+    });
+}
+
+#[test]
+fn rvalue_cast_ptr_to_ptr_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let i64_ty = ctx.intern_ty(ty::TirTy::I64);
+        let ptr_i32 = ctx.intern_ty(ty::TirTy::RawPtr(i32_ty, ty::Mutability::Imm));
+        let ptr_i64 = ctx.intern_ty(ty::TirTy::RawPtr(i64_ty, ty::Mutability::Mut));
+        let operand = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0x1000,
+                size: std::num::NonZero::new(8).unwrap(),
+            })),
+            ptr_i32,
+        ));
+        let rvalue = RValue::Cast(CastKind::PtrToPtr, operand, ptr_i64);
+        assert!(matches!(rvalue, RValue::Cast(CastKind::PtrToPtr, _, _)));
+    });
+}
+
+// ---- TirTy helper method tests ----
+
+#[test]
+fn tir_ty_is_integer() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let u64_ty = ctx.intern_ty(ty::TirTy::U64);
+        let f32_ty = ctx.intern_ty(ty::TirTy::F32);
+        let bool_ty = ctx.intern_ty(ty::TirTy::Bool);
+        let unit_ty = ctx.intern_ty(ty::TirTy::Unit);
+
+        assert!(i32_ty.is_integer());
+        assert!(u64_ty.is_integer());
+        assert!(!f32_ty.is_integer());
+        assert!(!bool_ty.is_integer());
+        assert!(!unit_ty.is_integer());
+    });
+}
+
+#[test]
+fn tir_ty_is_pointer() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let ptr_ty = ctx.intern_ty(ty::TirTy::RawPtr(i32_ty, ty::Mutability::Imm));
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+
+        assert!(ptr_ty.is_pointer());
+        assert!(!i32_ty.is_pointer());
+        assert!(!f64_ty.is_pointer());
+    });
 }
