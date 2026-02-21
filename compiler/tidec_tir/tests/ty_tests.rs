@@ -1,7 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use tidec_tir::ty::{Mutability, TirTy};
-use tidec_utils::interner::{Interner, Ty};
+use tidec_utils::interner::{Interner, Ty, TypeList};
 
 /// A minimal interner for testing `TirTy` in isolation.
 #[derive(Debug, Clone, Copy)]
@@ -10,11 +10,22 @@ struct DummyInterner;
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 struct DummyTy;
 
+/// A dummy type list for testing — wraps a static slice reference.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+struct DummyTypeList;
+
 impl Interner for DummyInterner {
     type Ty = DummyTy;
+    type TypeList = DummyTypeList;
 }
 
 impl Ty<DummyInterner> for DummyTy {}
+
+impl TypeList<DummyInterner> for DummyTypeList {
+    fn as_slice(&self) -> &[DummyTy] {
+        &[]
+    }
+}
 
 fn hash_of<T: Hash>(val: &T) -> u64 {
     let mut hasher = DefaultHasher::new();

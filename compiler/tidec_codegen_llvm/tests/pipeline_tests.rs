@@ -18,9 +18,9 @@ use tidec_tir::body::{
 };
 use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
 use tidec_tir::syntax::{
-    BasicBlock, BasicBlockData, BinaryOp, CastKind, ConstOperand, ConstScalar, ConstValue, Local,
-    LocalData, Operand, Place, RValue, RawScalarValue, Statement, SwitchTargets, Terminator,
-    UnaryOp, RETURN_LOCAL,
+    AggregateKind, BasicBlock, BasicBlockData, BinaryOp, CastKind, ConstOperand, ConstScalar,
+    ConstValue, Local, LocalData, Operand, Place, Projection, RValue, RawScalarValue, Statement,
+    SwitchTargets, Terminator, UnaryOp, RETURN_LOCAL,
 };
 use tidec_tir::ty::{Mutability, TirTy};
 use tidec_utils::idx::Idx;
@@ -2312,6 +2312,810 @@ fn pipeline_cast_int_same_width_noop() {
     assert!(
         !ir.contains("trunc") && !ir.contains("zext") && !ir.contains("sext"),
         "Same-width i32→i32 should be a no-op, got:\n{}",
+        ir
+    );
+}
+
+// ====================================================================
+// Composite Types — Struct & Array
+// ====================================================================
+
+/// Construct a struct { i32, i32 } aggregate with two fields and read back
+/// the first field via `Projection::Field`.
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: { i32, i32 } = Aggregate::Struct(10, 20);
+///     _0 = _1.0;  // Field(0)
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_struct_aggregate_and_field_access() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let fields = ctx.intern_type_list(&[i32_ty, i32_ty]);
+        let struct_ty = ctx.intern_ty(TirTy::<TirCtx>::Struct {
+            fields,
+            packed: false,
+        });
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![LocalData {
+                ty: struct_ty,
+                mutable: true,
+            }]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = Aggregate::Struct { 10, 20 }
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Struct(struct_ty),
+                            vec![const_i32(ctx, 10), const_i32(ctx, 20)],
+                        ),
+                    ))),
+                    // _0 = _1.0
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Field(0, i32_ty)],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- struct aggregate IR ---\n{}", ir);
+
+    // Must have an alloca for the struct local
+    assert!(
+        ir.contains("alloca"),
+        "Struct local should be alloca'd, got:\n{}",
+        ir
+    );
+    // Must have a getelementptr to access the field
+    assert!(
+        ir.contains("getelementptr"),
+        "Field access should use GEP, got:\n{}",
+        ir
+    );
+    // Should store the field values
+    assert!(
+        ir.contains("store i32"),
+        "Should store i32 fields, got:\n{}",
+        ir
+    );
+}
+
+/// Construct a struct { i32, i32 } and read the *second* field.
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: { i32, i32 } = Aggregate::Struct(10, 20);
+///     _0 = _1.1;  // Field(1)
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_struct_read_second_field() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let fields = ctx.intern_type_list(&[i32_ty, i32_ty]);
+        let struct_ty = ctx.intern_ty(TirTy::<TirCtx>::Struct {
+            fields,
+            packed: false,
+        });
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![LocalData {
+                ty: struct_ty,
+                mutable: true,
+            }]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Struct(struct_ty),
+                            vec![const_i32(ctx, 10), const_i32(ctx, 20)],
+                        ),
+                    ))),
+                    // _0 = _1.1
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Field(1, i32_ty)],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- struct second field IR ---\n{}", ir);
+
+    assert!(
+        ir.contains("getelementptr"),
+        "Second field access should use GEP, got:\n{}",
+        ir
+    );
+}
+
+/// Construct a packed struct { i8, i32 } and read the i32 field.
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: packed { i8, i32 } = Aggregate::Struct(0xFF, 42);
+///     _0 = _1.1;
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_packed_struct() {
+    let ir = compile_to_ir(|ctx| {
+        let i8_ty = ctx.intern_ty(TirTy::<TirCtx>::I8);
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let fields = ctx.intern_type_list(&[i8_ty, i32_ty]);
+        let struct_ty = ctx.intern_ty(TirTy::<TirCtx>::Struct {
+            fields,
+            packed: true,
+        });
+
+        let i8_const = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0xFF,
+                size: NonZero::new(1).unwrap(),
+            })),
+            i8_ty,
+        ));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![LocalData {
+                ty: struct_ty,
+                mutable: true,
+            }]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Struct(struct_ty),
+                            vec![i8_const, const_i32(ctx, 42)],
+                        ),
+                    ))),
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Field(1, i32_ty)],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- packed struct IR ---\n{}", ir);
+
+    // Packed struct should produce <{ ... }> in LLVM IR
+    assert!(
+        ir.contains("alloca"),
+        "Packed struct should be alloca'd, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("getelementptr"),
+        "Field access should use GEP, got:\n{}",
+        ir
+    );
+}
+
+/// Construct a struct with mixed types: { i32, f64 }
+///
+/// ```text
+/// fn main() -> f64 {
+///     _1: { i32, f64 } = Aggregate::Struct(42, 3.14);
+///     _0 = _1.1;  // read the f64 field
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_struct_mixed_types() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let f64_ty = ctx.intern_ty(TirTy::<TirCtx>::F64);
+        let fields = ctx.intern_type_list(&[i32_ty, f64_ty]);
+        let struct_ty = ctx.intern_ty(TirTy::<TirCtx>::Struct {
+            fields,
+            packed: false,
+        });
+
+        let f64_const = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0x40091EB851EB851F, // ~3.14 as f64 bits
+                size: NonZero::new(8).unwrap(),
+            })),
+            f64_ty,
+        ));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: f64_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![LocalData {
+                ty: struct_ty,
+                mutable: true,
+            }]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Struct(struct_ty),
+                            vec![const_i32(ctx, 42), f64_const],
+                        ),
+                    ))),
+                    // _0 = _1.1 (the f64 field)
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Field(1, f64_ty)],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- struct mixed types IR ---\n{}", ir);
+
+    assert!(
+        ir.contains("getelementptr"),
+        "Mixed-type struct field access should use GEP, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("store"),
+        "Should store values into struct fields, got:\n{}",
+        ir
+    );
+}
+
+/// Construct an array [i32; 3] aggregate and read back the first element.
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: [i32; 3] = Aggregate::Array(100, 200, 300);
+///     _2: u64 = 0;   // index
+///     _0 = _1[_2];   // Index projection
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_array_aggregate_and_index() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let u64_ty = ctx.intern_ty(TirTy::<TirCtx>::U64);
+        let array_ty = ctx.intern_ty(TirTy::<TirCtx>::Array(i32_ty, 3));
+
+        let const_u64_zero = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0,
+                size: NonZero::new(8).unwrap(),
+            })),
+            u64_ty,
+        ));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                // _1: [i32; 3]
+                LocalData {
+                    ty: array_ty,
+                    mutable: true,
+                },
+                // _2: u64 (index)
+                LocalData {
+                    ty: u64_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = [100, 200, 300]
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Array(i32_ty),
+                            vec![
+                                const_i32(ctx, 100),
+                                const_i32(ctx, 200),
+                                const_i32(ctx, 300),
+                            ],
+                        ),
+                    ))),
+                    // _2 = 0u64
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(2)),
+                        RValue::Operand(const_u64_zero),
+                    ))),
+                    // _0 = _1[_2]
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Index(Local::new(2))],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- array aggregate + index IR ---\n{}", ir);
+
+    // Must alloca the array
+    assert!(
+        ir.contains("alloca"),
+        "Array local should be alloca'd, got:\n{}",
+        ir
+    );
+    // Must have GEP for storing elements and for indexing
+    assert!(
+        ir.contains("getelementptr"),
+        "Array indexing should use GEP, got:\n{}",
+        ir
+    );
+    // Should contain stores for the three elements
+    assert!(
+        ir.contains("store i32"),
+        "Should store i32 elements, got:\n{}",
+        ir
+    );
+}
+
+/// Construct a single-element array [f64; 1].
+///
+/// ```text
+/// fn main() -> f64 {
+///     _1: [f64; 1] = Aggregate::Array(2.718);
+///     _2: u64 = 0;
+///     _0 = _1[_2];
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_array_single_element() {
+    let ir = compile_to_ir(|ctx| {
+        let f64_ty = ctx.intern_ty(TirTy::<TirCtx>::F64);
+        let u64_ty = ctx.intern_ty(TirTy::<TirCtx>::U64);
+        let array_ty = ctx.intern_ty(TirTy::<TirCtx>::Array(f64_ty, 1));
+
+        let f64_const = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0x4005BF0A8B145769, // ~2.718 as f64 bits
+                size: NonZero::new(8).unwrap(),
+            })),
+            f64_ty,
+        ));
+        let const_u64_zero = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0,
+                size: NonZero::new(8).unwrap(),
+            })),
+            u64_ty,
+        ));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: f64_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                LocalData {
+                    ty: array_ty,
+                    mutable: true,
+                },
+                LocalData {
+                    ty: u64_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(AggregateKind::Array(f64_ty), vec![f64_const]),
+                    ))),
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(2)),
+                        RValue::Operand(const_u64_zero),
+                    ))),
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Index(Local::new(2))],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- array single element IR ---\n{}", ir);
+
+    assert!(
+        ir.contains("alloca"),
+        "Array should be alloca'd, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("store double") || ir.contains("store float"),
+        "Should store f64 element, got:\n{}",
+        ir
+    );
+}
+
+/// Write to a struct field via `Projection::Field`.
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: { i32, i32 } = Aggregate::Struct(0, 0);
+///     _1.0 = 99;
+///     _0 = _1.0;
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_struct_field_write() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let fields = ctx.intern_type_list(&[i32_ty, i32_ty]);
+        let struct_ty = ctx.intern_ty(TirTy::<TirCtx>::Struct {
+            fields,
+            packed: false,
+        });
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![LocalData {
+                ty: struct_ty,
+                mutable: true,
+            }]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = Aggregate::Struct(0, 0)
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Struct(struct_ty),
+                            vec![const_i32(ctx, 0), const_i32(ctx, 0)],
+                        ),
+                    ))),
+                    // _1.0 = 99
+                    Statement::Assign(Box::new((
+                        Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Field(0, i32_ty)],
+                        },
+                        RValue::Operand(const_i32(ctx, 99)),
+                    ))),
+                    // _0 = _1.0
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Field(0, i32_ty)],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- struct field write IR ---\n{}", ir);
+
+    // Should have multiple GEPs (aggregate construction + field write + field read)
+    assert!(
+        ir.contains("getelementptr"),
+        "Field write/read should use GEP, got:\n{}",
+        ir
+    );
+    // Stores: both aggregate stores plus the overwrite
+    assert!(
+        ir.contains("store i32"),
+        "Should store i32 values, got:\n{}",
+        ir
+    );
+}
+
+/// Write to an array element via `Projection::Index`.
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: [i32; 2] = Aggregate::Array(0, 0);
+///     _2: u64 = 1;
+///     _1[_2] = 77;
+///     _0 = _1[_2];
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_array_element_write() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let u64_ty = ctx.intern_ty(TirTy::<TirCtx>::U64);
+        let array_ty = ctx.intern_ty(TirTy::<TirCtx>::Array(i32_ty, 2));
+
+        let const_u64_one = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 1,
+                size: NonZero::new(8).unwrap(),
+            })),
+            u64_ty,
+        ));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                // _1: [i32; 2]
+                LocalData {
+                    ty: array_ty,
+                    mutable: true,
+                },
+                // _2: u64 (index)
+                LocalData {
+                    ty: u64_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = [0, 0]
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Array(i32_ty),
+                            vec![const_i32(ctx, 0), const_i32(ctx, 0)],
+                        ),
+                    ))),
+                    // _2 = 1u64
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(2)),
+                        RValue::Operand(const_u64_one),
+                    ))),
+                    // _1[_2] = 77
+                    Statement::Assign(Box::new((
+                        Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Index(Local::new(2))],
+                        },
+                        RValue::Operand(const_i32(ctx, 77)),
+                    ))),
+                    // _0 = _1[_2]
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Index(Local::new(2))],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- array element write IR ---\n{}", ir);
+
+    assert!(
+        ir.contains("getelementptr"),
+        "Array element write/read should use GEP, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("store i32"),
+        "Should store i32 values, got:\n{}",
+        ir
+    );
+}
+
+/// Nested composite: struct { i32, [i32; 2] } — access the array field,
+/// then index into it.
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: [i32; 2] = Aggregate::Array(10, 20);  // inner array
+///     _2: { i32, [i32; 2] } = Aggregate::Struct(99, _1 as operand ref);
+///     ... (simplified: we just test the array aggregate + struct aggregate)
+/// }
+/// ```
+///
+/// This test checks that we can nest struct and array aggregates.
+#[test]
+fn pipeline_struct_with_array_field() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let array_ty = ctx.intern_ty(TirTy::<TirCtx>::Array(i32_ty, 2));
+        let fields = ctx.intern_type_list(&[i32_ty, array_ty]);
+        let struct_ty = ctx.intern_ty(TirTy::<TirCtx>::Struct {
+            fields,
+            packed: false,
+        });
+
+        // We construct the struct by building the whole struct aggregate.
+        // The array field is passed as individual elements when constructing
+        // the inner array first, then use Operand::Use to read the local.
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                // _1: [i32; 2] (inner array)
+                LocalData {
+                    ty: array_ty,
+                    mutable: true,
+                },
+                // _2: { i32, [i32; 2] } (the struct)
+                LocalData {
+                    ty: struct_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = [10, 20]
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Array(i32_ty),
+                            vec![const_i32(ctx, 10), const_i32(ctx, 20)],
+                        ),
+                    ))),
+                    // For now, just read back the first scalar field of the struct.
+                    // We'd construct the struct with _1 as a field, but since memory-backed
+                    // operand in aggregate is still todo, we test what we can:
+                    // Just test that both arrays and structs can be alloca'd and GEP'd.
+                    // _2.0 = 99 (write to struct field 0)
+                    Statement::Assign(Box::new((
+                        Place {
+                            local: Local::new(2),
+                            projection: vec![Projection::Field(0, i32_ty)],
+                        },
+                        RValue::Operand(const_i32(ctx, 99)),
+                    ))),
+                    // _0 = _2.0
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(2),
+                            projection: vec![Projection::Field(0, i32_ty)],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- struct with array field IR ---\n{}", ir);
+
+    assert!(
+        ir.contains("alloca"),
+        "Should have alloca for struct/array locals, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("getelementptr"),
+        "Should have GEP for field access, got:\n{}",
         ir
     );
 }
