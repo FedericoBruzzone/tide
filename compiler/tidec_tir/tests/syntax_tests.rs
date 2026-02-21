@@ -3,6 +3,7 @@ use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
 use tidec_tir::syntax::*;
 use tidec_tir::ty;
 use tidec_utils::idx::Idx;
+use tidec_utils::interner::TypeList;
 
 /// Helper to create a TirCtx for interning types in tests.
 fn with_ctx<F, R>(f: F) -> R
@@ -769,5 +770,332 @@ fn tir_ty_is_pointer() {
         assert!(ptr_ty.is_pointer());
         assert!(!i32_ty.is_pointer());
         assert!(!f64_ty.is_pointer());
+    });
+}
+
+// ---- Composite type construction tests ----
+
+#[test]
+fn tir_ty_struct_is_struct() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+        let fields = ctx.intern_type_list(&[i32_ty, f64_ty]);
+        let struct_ty = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: false,
+        });
+        assert!(struct_ty.is_struct());
+    });
+}
+
+#[test]
+fn tir_ty_struct_is_sized() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let fields = ctx.intern_type_list(&[i32_ty]);
+        let struct_ty = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: false,
+        });
+        assert!(struct_ty.is_sized());
+    });
+}
+
+#[test]
+fn tir_ty_struct_is_not_integer() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let fields = ctx.intern_type_list(&[i32_ty]);
+        let struct_ty = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: false,
+        });
+        assert!(!struct_ty.is_integer());
+        assert!(!struct_ty.is_floating_point());
+        assert!(!struct_ty.is_bool());
+        assert!(!struct_ty.is_unit());
+        assert!(!struct_ty.is_pointer());
+    });
+}
+
+#[test]
+fn tir_ty_struct_packed_vs_unpacked_differ() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let fields = ctx.intern_type_list(&[i32_ty]);
+        let packed = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: true,
+        });
+        let unpacked = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: false,
+        });
+        // Packed and unpacked structs with the same fields are different types.
+        assert_ne!(packed, unpacked);
+    });
+}
+
+#[test]
+fn tir_ty_struct_same_fields_are_equal() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+        let fields = ctx.intern_type_list(&[i32_ty, f64_ty]);
+        let s1 = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: false,
+        });
+        let s2 = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: false,
+        });
+        assert_eq!(s1, s2);
+    });
+}
+
+#[test]
+fn tir_ty_struct_empty() {
+    with_ctx(|ctx| {
+        let fields = ctx.intern_type_list(&[]);
+        let empty_struct = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: false,
+        });
+        assert!(empty_struct.is_struct());
+        assert!(empty_struct.is_sized());
+    });
+}
+
+#[test]
+fn tir_ty_array_is_array() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let array_ty = ctx.intern_ty(ty::TirTy::Array(i32_ty, 10));
+        assert!(array_ty.is_array());
+    });
+}
+
+#[test]
+fn tir_ty_array_is_sized() {
+    with_ctx(|ctx| {
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+        let array_ty = ctx.intern_ty(ty::TirTy::Array(f64_ty, 5));
+        assert!(array_ty.is_sized());
+    });
+}
+
+#[test]
+fn tir_ty_array_is_not_integer() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let array_ty = ctx.intern_ty(ty::TirTy::Array(i32_ty, 3));
+        assert!(!array_ty.is_integer());
+        assert!(!array_ty.is_floating_point());
+        assert!(!array_ty.is_bool());
+        assert!(!array_ty.is_unit());
+        assert!(!array_ty.is_pointer());
+    });
+}
+
+#[test]
+fn tir_ty_array_same_elem_same_count_equal() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let a1 = ctx.intern_ty(ty::TirTy::Array(i32_ty, 4));
+        let a2 = ctx.intern_ty(ty::TirTy::Array(i32_ty, 4));
+        assert_eq!(a1, a2);
+    });
+}
+
+#[test]
+fn tir_ty_array_different_count_differ() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let a1 = ctx.intern_ty(ty::TirTy::Array(i32_ty, 3));
+        let a2 = ctx.intern_ty(ty::TirTy::Array(i32_ty, 5));
+        assert_ne!(a1, a2);
+    });
+}
+
+#[test]
+fn tir_ty_array_different_elem_differ() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let f32_ty = ctx.intern_ty(ty::TirTy::F32);
+        let a1 = ctx.intern_ty(ty::TirTy::Array(i32_ty, 3));
+        let a2 = ctx.intern_ty(ty::TirTy::Array(f32_ty, 3));
+        assert_ne!(a1, a2);
+    });
+}
+
+#[test]
+fn tir_ty_array_zero_length() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let empty_array = ctx.intern_ty(ty::TirTy::Array(i32_ty, 0));
+        assert!(empty_array.is_array());
+        assert!(empty_array.is_sized());
+    });
+}
+
+#[test]
+fn tir_ty_struct_not_equal_to_array() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let fields = ctx.intern_type_list(&[i32_ty]);
+        let struct_ty = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: false,
+        });
+        let array_ty = ctx.intern_ty(ty::TirTy::Array(i32_ty, 1));
+        assert_ne!(struct_ty, array_ty);
+        assert!(struct_ty.is_struct());
+        assert!(!struct_ty.is_array());
+        assert!(array_ty.is_array());
+        assert!(!array_ty.is_struct());
+    });
+}
+
+// ---- RValue::Aggregate construction tests ----
+
+#[test]
+fn rvalue_aggregate_struct_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+        let fields = ctx.intern_type_list(&[i32_ty, f64_ty]);
+        let struct_ty = ctx.intern_ty(ty::TirTy::Struct {
+            fields,
+            packed: false,
+        });
+
+        let op_i32 = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 42,
+                size: std::num::NonZero::new(4).unwrap(),
+            })),
+            i32_ty,
+        ));
+        let op_f64 = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0x4024000000000000, // 10.0
+                size: std::num::NonZero::new(8).unwrap(),
+            })),
+            f64_ty,
+        ));
+
+        let rvalue = RValue::Aggregate(AggregateKind::Struct(struct_ty), vec![op_i32, op_f64]);
+        assert!(matches!(
+            rvalue,
+            RValue::Aggregate(AggregateKind::Struct(_), _)
+        ));
+    });
+}
+
+#[test]
+fn rvalue_aggregate_array_construction() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+
+        let ops: Vec<Operand<'_>> = (0..3)
+            .map(|i| {
+                Operand::Const(ConstOperand::Value(
+                    ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                        data: i as u128,
+                        size: std::num::NonZero::new(4).unwrap(),
+                    })),
+                    i32_ty,
+                ))
+            })
+            .collect();
+
+        let rvalue = RValue::Aggregate(AggregateKind::Array(i32_ty), ops);
+        assert!(matches!(
+            rvalue,
+            RValue::Aggregate(AggregateKind::Array(_), _)
+        ));
+    });
+}
+
+// ---- Place with composite projections ----
+
+#[test]
+fn place_with_field_projection_on_struct() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let place = Place {
+            local: Local::new(1),
+            projection: vec![Projection::Field(0, i32_ty)],
+        };
+        assert!(place.try_local().is_none());
+        assert_eq!(place.projection.len(), 1);
+        assert!(matches!(place.projection[0], Projection::Field(0, _)));
+    });
+}
+
+#[test]
+fn place_with_index_projection_on_array() {
+    let place: Place<'_> = Place {
+        local: Local::new(1),
+        projection: vec![Projection::Index(Local::new(2))],
+    };
+    assert!(place.try_local().is_none());
+    assert_eq!(place.projection.len(), 1);
+    assert!(matches!(place.projection[0], Projection::Index(_)));
+}
+
+#[test]
+fn place_with_field_then_index() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        // Access: _1.field0[_2]
+        let place = Place {
+            local: Local::new(1),
+            projection: vec![
+                Projection::Field(0, i32_ty),
+                Projection::Index(Local::new(2)),
+            ],
+        };
+        assert_eq!(place.projection.len(), 2);
+        assert!(matches!(place.projection[0], Projection::Field(0, _)));
+        assert!(matches!(place.projection[1], Projection::Index(_)));
+    });
+}
+
+// ---- intern_type_list tests ----
+
+#[test]
+fn intern_type_list_empty() {
+    with_ctx(|ctx| {
+        let tl = ctx.intern_type_list(&[]);
+        assert!(tl.is_empty());
+        assert_eq!(tl.len(), 0);
+    });
+}
+
+#[test]
+fn intern_type_list_single_element() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let tl = ctx.intern_type_list(&[i32_ty]);
+        assert_eq!(tl.len(), 1);
+        assert_eq!(tl.as_slice()[0], i32_ty);
+    });
+}
+
+#[test]
+fn intern_type_list_multiple_elements() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let f64_ty = ctx.intern_ty(ty::TirTy::F64);
+        let bool_ty = ctx.intern_ty(ty::TirTy::Bool);
+        let tl = ctx.intern_type_list(&[i32_ty, f64_ty, bool_ty]);
+        assert_eq!(tl.len(), 3);
+        let slice = tl.as_slice();
+        assert_eq!(slice[0], i32_ty);
+        assert_eq!(slice[1], f64_ty);
+        assert_eq!(slice[2], bool_ty);
     });
 }
