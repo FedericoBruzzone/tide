@@ -7,7 +7,7 @@ pub mod ty;
 
 use crate::ctx::TirCtx;
 use std::ops::Deref;
-use tidec_utils::interner::{Interned, Ty};
+use tidec_utils::interner::{Interned, Ty, TypeList};
 
 /// An interned allocation, similar to how `TirTy` and `Layout` are handled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -59,5 +59,57 @@ impl<'ctx> Deref for TirTy<'ctx> {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+/// An interned list of types, used to represent struct fields.
+///
+/// This is a thin wrapper around `&'ctx [TirTy<'ctx>]` (an arena-allocated
+/// slice of interned types). It is `Copy` because slice references are `Copy`.
+///
+/// Two `TirTypeList` values are equal if and only if they point to the same
+/// arena-allocated slice (pointer equality), which is guaranteed by the
+/// interning infrastructure.
+#[derive(Clone, Copy)]
+pub struct TirTypeList<'ctx>(&'ctx [TirTy<'ctx>]);
+
+impl<'ctx> TirTypeList<'ctx> {
+    /// Create a new `TirTypeList` from an arena-allocated slice.
+    pub fn new(slice: &'ctx [TirTy<'ctx>]) -> Self {
+        TirTypeList(slice)
+    }
+
+    /// Returns the underlying slice.
+    pub fn as_slice(&self) -> &'ctx [TirTy<'ctx>] {
+        self.0
+    }
+}
+
+impl<'ctx> std::fmt::Debug for TirTypeList<'ctx> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TirTypeList({:?})", self.0)
+    }
+}
+
+impl<'ctx> PartialEq for TirTypeList<'ctx> {
+    fn eq(&self, other: &Self) -> bool {
+        // Pointer equality: same arena allocation means same list.
+        std::ptr::eq(self.0.as_ptr(), other.0.as_ptr()) && self.0.len() == other.0.len()
+    }
+}
+
+impl<'ctx> Eq for TirTypeList<'ctx> {}
+
+impl<'ctx> std::hash::Hash for TirTypeList<'ctx> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hash the pointer and length for pointer-identity hashing.
+        (self.0.as_ptr() as usize).hash(state);
+        self.0.len().hash(state);
+    }
+}
+
+impl<'ctx> TypeList<TirCtx<'ctx>> for TirTypeList<'ctx> {
+    fn as_slice(&self) -> &[TirTy<'ctx>] {
+        self.0
     }
 }

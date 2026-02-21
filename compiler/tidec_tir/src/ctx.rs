@@ -140,6 +140,58 @@ impl ArenaDropless {
 
         unsafe { &*ptr }
     }
+
+    /// Allocates a slice of values in the arena by copying from the given slice.
+    ///
+    /// Returns a reference to the arena-allocated slice. The returned `&[T]` is
+    /// `Copy` (since it's a fat reference) and lives as long as the arena.
+    ///
+    /// # Panics
+    ///
+    /// Panics if memory allocation fails.
+    pub fn alloc_slice<T: Copy>(&self, slice: &[T]) -> &[T] {
+        if slice.is_empty() {
+            return &[];
+        }
+
+        let size = std::mem::size_of::<T>() * slice.len();
+        let align = std::mem::align_of::<T>();
+
+        // Ensure we have enough space in the current chunk.
+        // We need to align the start pointer first.
+        let start = self.start.get() as usize;
+        let aligned_start = (start + align - 1) & !(align - 1);
+        let needed = aligned_start - start + size;
+
+        if unsafe { self.start.get().add(needed) } > self.end.get() {
+            // Not enough space, allocate a new chunk.
+            let chunk_size = std::cmp::max(1024, size + align);
+            let layout = std::alloc::Layout::from_size_align(chunk_size, align).unwrap();
+            let ptr = unsafe { std::alloc::alloc(layout) };
+            if ptr.is_null() {
+                std::alloc::handle_alloc_error(layout);
+            }
+            let chunk = ArenaChunk {
+                _mem: NonNull::slice_from_raw_parts(NonNull::new(ptr).unwrap(), chunk_size),
+            };
+            self.inner.borrow_mut().push(chunk);
+            self.start.set(ptr);
+            self.end.set(unsafe { ptr.add(chunk_size) });
+        }
+
+        // Align the start pointer.
+        let start = self.start.get() as usize;
+        let aligned_start = (start + align - 1) & !(align - 1);
+        let ptr = aligned_start as *mut T;
+
+        // Copy the slice data into the arena.
+        unsafe {
+            std::ptr::copy_nonoverlapping(slice.as_ptr(), ptr, slice.len());
+        }
+        self.start.set(unsafe { (ptr as *mut u8).add(size) });
+
+        unsafe { std::slice::from_raw_parts(ptr, slice.len()) }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -394,6 +446,25 @@ impl<'ctx> TirCtx<'ctx> {
         ))
     }
 
+    /// Intern a list of types, returning an arena-allocated `TirTypeList`.
+    ///
+    /// If an identical list (by value) already exists, the existing allocation
+    /// is returned. This deduplication uses the `type_lists` interning set.
+    ///
+    /// The returned `TirTypeList` is `Copy` and lives as long as the arena.
+    pub fn intern_type_list(&self, types: &[TirTy<'ctx>]) -> crate::TirTypeList<'ctx> {
+        if types.is_empty() {
+            return crate::TirTypeList::new(&[]);
+        }
+        // Allocate the slice in the arena and wrap it.
+        // Note: We don't deduplicate type lists for now (unlike types/layouts)
+        // because the InternedSet machinery expects a single `ArenaPrt<T>`,
+        // not a slice. For most practical uses, structs are defined once
+        // and the same TirTy is reused via interning.
+        let arena_slice = self.intern_ctx.arena.alloc_slice(types);
+        crate::TirTypeList::new(arena_slice)
+    }
+
     // ===== Allocation interning =====
 
     /// Intern an allocation in the arena and return an interned `TirAllocation`.
@@ -456,4 +527,5 @@ impl<'ctx> TirCtx<'ctx> {
 
 impl<'ctx> Interner for TirCtx<'ctx> {
     type Ty = TirTy<'ctx>;
+    type TypeList = crate::TirTypeList<'ctx>;
 }

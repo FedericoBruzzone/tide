@@ -35,6 +35,30 @@ impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
                 // In LLVM's opaque pointer model, all pointers are just `ptr`
                 BasicTypeEnum::PointerType(ctx.ll_context.ptr_type(Default::default())).into()
             }
+            ty::TirTy::Struct { fields, packed } => {
+                let basic_fields: Vec<BasicTypeEnum<'ll>> = fields
+                    .as_slice()
+                    .iter()
+                    .map(|f| f.into_basic_type(ctx))
+                    .collect();
+                BasicTypeEnum::StructType(
+                    ctx.ll_context.struct_type(&basic_fields, *packed),
+                )
+                .into()
+            }
+            ty::TirTy::Array(element_ty, count) => {
+                let elem_llty = element_ty.into_basic_type(ctx);
+                match elem_llty {
+                    BasicTypeEnum::IntType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
+                    BasicTypeEnum::FloatType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
+                    BasicTypeEnum::PointerType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
+                    BasicTypeEnum::StructType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
+                    BasicTypeEnum::ArrayType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
+                    BasicTypeEnum::VectorType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
+                    #[allow(unreachable_patterns)]
+                    _ => panic!("Unsupported array element type: {:?}", elem_llty),
+                }
+            }
             ty::TirTy::Metadata => {
                 BasicMetadataTypeEnum::MetadataType(ctx.ll_context.metadata_type())
             }
@@ -62,6 +86,27 @@ impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
             ty::TirTy::RawPtr(_, _) => {
                 // In LLVM's opaque pointer model, all pointers are just `ptr`
                 BasicTypeEnum::PointerType(ctx.ll_context.ptr_type(Default::default()))
+            }
+            ty::TirTy::Struct { fields, packed } => {
+                let basic_fields: Vec<BasicTypeEnum<'ll>> = fields
+                    .as_slice()
+                    .iter()
+                    .map(|f| f.into_basic_type(ctx))
+                    .collect();
+                BasicTypeEnum::StructType(ctx.ll_context.struct_type(&basic_fields, *packed))
+            }
+            ty::TirTy::Array(element_ty, count) => {
+                let elem_llty = element_ty.into_basic_type(ctx);
+                match elem_llty {
+                    BasicTypeEnum::IntType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
+                    BasicTypeEnum::FloatType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
+                    BasicTypeEnum::PointerType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
+                    BasicTypeEnum::StructType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
+                    BasicTypeEnum::ArrayType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
+                    BasicTypeEnum::VectorType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
+                    #[allow(unreachable_patterns)]
+                    _ => panic!("Unsupported array element type: {:?}", elem_llty),
+                }
             }
             ty::TirTy::Metadata => panic!("Metadata type cannot be converted to BasicTypeEnum"),
         }

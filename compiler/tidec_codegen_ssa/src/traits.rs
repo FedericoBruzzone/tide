@@ -432,6 +432,39 @@ pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
         name: &str,
     ) -> Self::Value;
 
+    /// Build a GEP (GetElementPtr) instruction for indexing into an array.
+    ///
+    /// Given a pointer to an array in memory, this computes the address of the
+    /// element at `index`. The `ty` parameter is the LLVM element type.
+    ///
+    /// Returns a pointer to the element.
+    fn build_inbounds_gep(
+        &mut self,
+        ty: Self::Type,
+        ptr: Self::Value,
+        indices: &[Self::Value],
+        name: &str,
+    ) -> Self::Value;
+
+    /// Extract a value from an aggregate (struct or array) at the given index.
+    ///
+    /// This operates on SSA aggregate values (not memory). Maps to LLVM
+    /// `extractvalue`.
+    fn build_extract_value(&mut self, agg: Self::Value, index: u32, name: &str) -> Self::Value;
+
+    /// Insert a value into an aggregate (struct or array) at the given index.
+    ///
+    /// Returns a new aggregate with the value at `index` replaced. This
+    /// operates on SSA aggregate values (not memory). Maps to LLVM
+    /// `insertvalue`.
+    fn build_insert_value(
+        &mut self,
+        agg: Self::Value,
+        value: Self::Value,
+        index: u32,
+        name: &str,
+    ) -> Self::Value;
+
     /// Convert a function value to a pointer value.
     /// This is used when passing functions as arguments or storing them.
     fn fn_to_ptr(&mut self, fn_value: Self::FunctionValue) -> Self::Value;

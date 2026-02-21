@@ -6,8 +6,31 @@ use std::ptr;
 
 pub trait Ty<I: Interner<Ty = Self>>: Sized + Clone + Copy + Debug + Eq + PartialEq + Hash {}
 
+/// A list of types, used to represent struct fields and function parameter lists.
+///
+/// This trait abstracts over the storage of type lists. For the concrete
+/// `TirCtx<'ctx>` interner, the implementation is `&'ctx [TirTy<'ctx>]` —
+/// an arena-allocated slice, which is `Copy`.
+pub trait TypeList<I: Interner<TypeList = Self>>:
+    Sized + Clone + Copy + Debug + Eq + PartialEq + Hash
+{
+    /// Returns the types in this list as a slice.
+    fn as_slice(&self) -> &[I::Ty];
+
+    /// Returns the number of types in this list.
+    fn len(&self) -> usize {
+        self.as_slice().len()
+    }
+
+    /// Returns `true` if this list is empty.
+    fn is_empty(&self) -> bool {
+        self.as_slice().is_empty()
+    }
+}
+
 pub trait Interner: Sized + Clone + Copy {
     type Ty: Ty<Self>;
+    type TypeList: TypeList<Self>;
 }
 
 /// A reference to a value that is interned, and is known to be unique.
