@@ -193,6 +193,37 @@ pub enum RValue<'ctx> {
     /// destination type. The codegen layer picks the precise LLVM
     /// instruction based on source/destination widths and signedness.
     Cast(CastKind, Operand<'ctx>, TirTy<'ctx>),
+    /// Construct an aggregate value (struct or array) from its field/element operands.
+    ///
+    /// The `AggregateKind` specifies what kind of aggregate is being built
+    /// and includes the result type. The `Vec<Operand>` contains one operand
+    /// per field (for structs) or element (for arrays), in order.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Build struct { i32, f64 } from two operands:
+    /// RValue::Aggregate(AggregateKind::Struct(struct_ty), vec![i32_op, f64_op])
+    ///
+    /// // Build [i32; 3] from three operands:
+    /// RValue::Aggregate(AggregateKind::Array(i32_ty), vec![op0, op1, op2])
+    /// ```
+    Aggregate(AggregateKind<'ctx>, Vec<Operand<'ctx>>),
+}
+
+#[derive(Debug, Clone)]
+/// The kind of aggregate being constructed in `RValue::Aggregate`.
+pub enum AggregateKind<'ctx> {
+    /// A struct aggregate. The `TirTy` is the struct type being constructed.
+    ///
+    /// The operands in the `RValue::Aggregate` correspond to the struct's
+    /// fields in declaration order.
+    Struct(TirTy<'ctx>),
+    /// An array aggregate. The `TirTy` is the element type of the array.
+    ///
+    /// The operands in the `RValue::Aggregate` correspond to the array's
+    /// elements in index order.
+    Array(TirTy<'ctx>),
 }
 
 #[derive(Debug, Clone)]

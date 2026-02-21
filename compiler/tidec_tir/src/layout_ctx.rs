@@ -1,4 +1,4 @@
-use crate::{ctx::TirCtx, ty, TirTy};
+use crate::{ctx::TirCtx, ty, TirTy, TirTypeList};
 use tidec_abi::{
     layout::{self, BackendRepr, Primitive},
     size_and_align::{AbiAndPrefAlign, Size},
@@ -95,12 +95,112 @@ impl<'ctx> LayoutCtx<'ctx> {
             // Metadata represents type information for unsized types (such as slices or trait objects),
             // which require special handling for their layout. Support for this will be added in a future release.
             ty::TirTy::Metadata => unimplemented!("Layout computation for TirTy::Metadata (used for unsized types/trait objects) is not yet supported. See TODO comment for details."),
+            ty::TirTy::Struct { fields, packed } => {
+                return self.compute_struct_layout(fields, *packed);
+            }
+            ty::TirTy::Array(element_ty, count) => {
+                return self.compute_array_layout(*element_ty, *count);
+            }
         };
 
         self.tir_ctx.intern_layout(layout::Layout {
             size,
             align,
             backend_repr,
+        })
+    }
+
+    /// Compute the layout for a struct type.
+    ///
+    /// Field offsets are computed using C-style struct layout rules:
+    /// each field is placed at the first offset that satisfies its alignment
+    /// requirement, with padding inserted as needed. The total size is then
+    /// rounded up to the struct's overall alignment.
+    ///
+    /// If `packed` is `true`, no alignment padding is inserted between fields
+    /// and the struct's overall alignment is 1.
+    fn compute_struct_layout(&self, fields: &TirTypeList<'ctx>, packed: bool) -> Layout<'ctx> {
+        let field_types = fields.as_slice();
+
+        if field_types.is_empty() {
+            // Empty struct is a ZST.
+            return self.tir_ctx.intern_layout(layout::Layout {
+                size: Size::ZERO,
+                align: AbiAndPrefAlign::new(1, 1),
+                backend_repr: BackendRepr::Memory,
+            });
+        }
+
+        let mut struct_size: u64 = 0;
+        let mut struct_align: u64 = 1;
+
+        for field_ty in field_types {
+            let field_layout = self.compute_layout(*field_ty);
+
+            let field_align = if packed {
+                1
+            } else {
+                field_layout.align.abi.bytes()
+            };
+
+            // Align the current offset to the field's alignment.
+            if field_align > 0 {
+                struct_size = (struct_size + field_align - 1) & !(field_align - 1);
+            }
+
+            // Advance past this field.
+            struct_size += field_layout.size.bytes();
+
+            // Track the maximum alignment.
+            if field_align > struct_align {
+                struct_align = field_align;
+            }
+        }
+
+        // If packed, struct alignment is 1. Otherwise, use the max field alignment.
+        let final_align = if packed { 1 } else { struct_align };
+
+        // Round the total size up to the struct's alignment.
+        if final_align > 0 {
+            struct_size = (struct_size + final_align - 1) & !(final_align - 1);
+        }
+
+        self.tir_ctx.intern_layout(layout::Layout {
+            size: Size::from_bytes(struct_size),
+            align: AbiAndPrefAlign::new(final_align, final_align),
+            backend_repr: BackendRepr::Memory,
+        })
+    }
+
+    /// Compute the layout for an array type.
+    ///
+    /// The layout is: `element_size` (rounded up to element alignment) × `count`.
+    /// An array of zero elements is a ZST.
+    fn compute_array_layout(&self, element_ty: TirTy<'ctx>, count: u64) -> Layout<'ctx> {
+        let elem_layout = self.compute_layout(element_ty);
+
+        if count == 0 {
+            return self.tir_ctx.intern_layout(layout::Layout {
+                size: Size::ZERO,
+                align: elem_layout.align,
+                backend_repr: BackendRepr::Memory,
+            });
+        }
+
+        // Element stride is the element size rounded up to its alignment.
+        let elem_align = elem_layout.align.abi.bytes();
+        let elem_stride = if elem_align > 0 {
+            (elem_layout.size.bytes() + elem_align - 1) & !(elem_align - 1)
+        } else {
+            elem_layout.size.bytes()
+        };
+
+        let total_size = elem_stride * count;
+
+        self.tir_ctx.intern_layout(layout::Layout {
+            size: Size::from_bytes(total_size),
+            align: elem_layout.align,
+            backend_repr: BackendRepr::Memory,
         })
     }
 }

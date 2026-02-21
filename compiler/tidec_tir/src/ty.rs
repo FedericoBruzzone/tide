@@ -44,6 +44,38 @@ pub enum TirTy<I: Interner> {
     /// Note that when mutable is a c-style pointer.
     RawPtr(I::Ty, Mutability),
 
+    /// A struct (product) type.
+    ///
+    /// Contains a list of field types stored as an interned type list.
+    /// The `packed` flag indicates whether the struct uses packed layout
+    /// (no inter-field padding for alignment).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // struct { i32, f64 }
+    /// TirTy::Struct { fields: intern_type_list(&[i32_ty, f64_ty]), packed: false }
+    /// ```
+    Struct {
+        /// The field types of the struct, stored as an interned type list.
+        fields: I::TypeList,
+        /// If `true`, the struct has packed layout (no alignment padding).
+        packed: bool,
+    },
+
+    /// A fixed-size array type.
+    ///
+    /// Contains the element type and the number of elements.
+    /// The element type must be sized.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // [i32; 4]
+    /// TirTy::Array(i32_ty, 4)
+    /// ```
+    Array(I::Ty, u64),
+
     /// A function pointer.
     // FnPty {
     //     param_tys: Vec<TirTy>,
@@ -99,6 +131,16 @@ impl<I: Interner> TirTy<I> {
         matches!(self, TirTy::Unit)
     }
 
+    /// Returns `true` if this type is a struct type.
+    pub fn is_struct(&self) -> bool {
+        matches!(self, TirTy::Struct { .. })
+    }
+
+    /// Returns `true` if this type is an array type.
+    pub fn is_array(&self) -> bool {
+        matches!(self, TirTy::Array(_, _))
+    }
+
     /// This function returns true if the type is a sized type.
     /// That is, it has a known size at compile time.
     pub fn is_sized(&self) -> bool {
@@ -120,6 +162,8 @@ impl<I: Interner> TirTy<I> {
             | TirTy::F64
             | TirTy::F128 => true,
             TirTy::RawPtr(_, _) => true,
+            TirTy::Struct { .. } => true,
+            TirTy::Array(_, _) => true,
             // TirTy::FnPty { .. } => true,
             TirTy::Metadata => false,
         }
@@ -152,16 +196,17 @@ impl<I: Interner> PartialEq for TirTy<I> {
             | (TirTy::F64, TirTy::F64)
             | (TirTy::F128, TirTy::F128) => true,
             (TirTy::RawPtr(ty1, mut1), TirTy::RawPtr(ty2, mut2)) => ty1 == ty2 && mut1 == mut2,
-            // (
-            //     TirTy::FnPty {
-            //         param_tys: params1,
-            //         ret_ty: ret1,
-            //     },
-            //     TirTy::FnPty {
-            //         param_tys: params2,
-            //         ret_ty: ret2,
-            //     },
-            // ) => params1 == params2 && ret1 == ret2,
+            (
+                TirTy::Struct {
+                    fields: f1,
+                    packed: p1,
+                },
+                TirTy::Struct {
+                    fields: f2,
+                    packed: p2,
+                },
+            ) => f1 == f2 && p1 == p2,
+            (TirTy::Array(ty1, len1), TirTy::Array(ty2, len2)) => ty1 == ty2 && len1 == len2,
             (TirTy::Metadata, TirTy::Metadata) => true,
             _ => false,
         }
@@ -194,12 +239,17 @@ impl<I: Interner> Hash for TirTy<I> {
                 ty.hash(state);
                 mutability.hash(state);
             }
-            // TirTy::FnPty { param_tys, ret_ty } => {
-            //     17.hash(state);
-            //     param_tys.hash(state);
-            //     ret_ty.hash(state);
-            // }
-            TirTy::Metadata => 18.hash(state),
+            TirTy::Struct { fields, packed } => {
+                17.hash(state);
+                fields.hash(state);
+                packed.hash(state);
+            }
+            TirTy::Array(ty, len) => {
+                18.hash(state);
+                ty.hash(state);
+                len.hash(state);
+            }
+            TirTy::Metadata => 19.hash(state),
         }
     }
 }

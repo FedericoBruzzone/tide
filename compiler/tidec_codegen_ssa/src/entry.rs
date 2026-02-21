@@ -7,8 +7,8 @@ use tidec_tir::{
     TirTy,
     body::TirBody,
     syntax::{
-        BasicBlock, BasicBlockData, BinaryOp, CastKind, Local, Operand, Place, Projection,
-        RETURN_LOCAL, RValue, Statement, SwitchTargets, Terminator, UnaryOp,
+        AggregateKind, BasicBlock, BasicBlockData, BinaryOp, CastKind, Local, Operand, Place,
+        Projection, RETURN_LOCAL, RValue, Statement, SwitchTargets, Terminator, UnaryOp,
     },
 };
 use tidec_utils::idx::Idx;
@@ -116,11 +116,22 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                                 // to handle any side effects it may have.
                                 // For example, if the rvalue is a function call
                                 // that may panic, we need to codegen it.
-                                self.codegen_rvalue_operand(builder, rvalue);
+                                if !matches!(rvalue, RValue::Aggregate(_, _)) {
+                                    self.codegen_rvalue_operand(builder, rvalue);
+                                }
                             }
                             LocalRef::PendingOperandRef => {
-                                let operand = self.codegen_rvalue_operand(builder, rvalue);
-                                self.overwrite_local(local, LocalRef::OperandRef(operand));
+                                // Aggregates must go through the place-based path.
+                                // Promote this local to a PlaceRef (alloca).
+                                if matches!(rvalue, RValue::Aggregate(_, _)) {
+                                    let layout = builder.ctx().layout_of(self.local_ty(local));
+                                    let place_ref = PlaceRef::alloca(builder, layout);
+                                    self.overwrite_local(local, LocalRef::PlaceRef(place_ref));
+                                    self.codegen_rvalue(builder, place_ref, rvalue);
+                                } else {
+                                    let operand = self.codegen_rvalue_operand(builder, rvalue);
+                                    self.overwrite_local(local, LocalRef::OperandRef(operand));
+                                }
                             }
                         }
                     }
@@ -149,6 +160,13 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         place_ref: PlaceRef<'ctx, B::Value>,
         rvalue: &RValue<'ctx>,
     ) {
+        // Handle aggregate construction specially: store each operand
+        // directly into the corresponding field/element of the place.
+        if let RValue::Aggregate(agg_kind, operands) = rvalue {
+            self.codegen_aggregate(builder, place_ref, agg_kind, operands);
+            return;
+        }
+
         let operand = self.codegen_rvalue_operand(builder, rvalue);
         match operand.operand_val {
             OperandVal::Immediate(val) => {
@@ -162,6 +180,93 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
             }
             OperandVal::Ref(_src_place_val) => {
                 todo!("Handle storing a memory reference into a place (requires memcpy)")
+            }
+        }
+    }
+
+    /// Codegen an aggregate construction (`RValue::Aggregate`) into a place.
+    ///
+    /// For structs: each operand is stored into the corresponding struct field
+    /// via a GEP + store.
+    /// For arrays: each operand is stored into the corresponding array element
+    /// via a GEP + store.
+    fn codegen_aggregate(
+        &mut self,
+        builder: &mut B,
+        place_ref: PlaceRef<'ctx, B::Value>,
+        agg_kind: &AggregateKind<'ctx>,
+        operands: &[Operand<'ctx>],
+    ) {
+        let aggregate_llty = builder.ctx().backend_type_of(place_ref.ty_layout.ty);
+
+        match agg_kind {
+            AggregateKind::Struct(struct_ty) => {
+                debug!(
+                    "Codegen aggregate struct {:?} with {} fields",
+                    struct_ty,
+                    operands.len()
+                );
+                for (i, operand) in operands.iter().enumerate() {
+                    let field_ref = self.codegen_operand(builder, operand);
+                    let field_ptr = builder.build_struct_gep(
+                        aggregate_llty,
+                        place_ref.place_val.value,
+                        i as u32,
+                        &format!("field{}", i),
+                    );
+                    match field_ref.operand_val {
+                        OperandVal::Immediate(val) => {
+                            builder.build_store(
+                                val,
+                                field_ptr,
+                                field_ref.ty_layout.layout.align.abi,
+                            );
+                        }
+                        OperandVal::Zst => {
+                            // Nothing to store for ZST fields.
+                        }
+                        _ => todo!("Handle non-immediate aggregate field values"),
+                    }
+                }
+            }
+            AggregateKind::Array(elem_ty) => {
+                debug!(
+                    "Codegen aggregate array [{:?}; {}]",
+                    elem_ty,
+                    operands.len()
+                );
+                let elem_llty = builder.ctx().backend_type_of(*elem_ty);
+                let elem_layout = builder.ctx().layout_of(*elem_ty);
+                let i64_type_val = |builder: &mut B, idx: u64| -> B::Value {
+                    let ctx = builder.ctx();
+                    let i64_ty = ctx.layout_of(ctx.tir_ctx().intern_ty(tidec_tir::ty::TirTy::U64));
+                    builder.const_scalar_to_backend_value(
+                        tidec_tir::syntax::ConstScalar::Value(tidec_tir::syntax::RawScalarValue {
+                            data: idx as u128,
+                            size: std::num::NonZero::new(8).unwrap(),
+                        }),
+                        i64_ty,
+                    )
+                };
+                for (i, operand) in operands.iter().enumerate() {
+                    let elem_ref = self.codegen_operand(builder, operand);
+                    let index_val = i64_type_val(builder, i as u64);
+                    let elem_ptr = builder.build_inbounds_gep(
+                        elem_llty,
+                        place_ref.place_val.value,
+                        &[index_val],
+                        &format!("elem{}", i),
+                    );
+                    match elem_ref.operand_val {
+                        OperandVal::Immediate(val) => {
+                            builder.build_store(val, elem_ptr, elem_layout.layout.align.abi);
+                        }
+                        OperandVal::Zst => {
+                            // Nothing to store for ZST elements.
+                        }
+                        _ => todo!("Handle non-immediate aggregate element values"),
+                    }
+                }
             }
         }
     }
@@ -233,6 +338,12 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
             }
             RValue::Cast(cast_kind, operand, dest_ty) => {
                 self.codegen_cast(builder, cast_kind, operand, *dest_ty)
+            }
+            RValue::Aggregate(_, _) => {
+                panic!(
+                    "RValue::Aggregate should be handled by codegen_rvalue (place-based), \
+                     not codegen_rvalue_operand. Aggregates are Memory-backed types."
+                );
             }
         }
     }
@@ -753,8 +864,39 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                         ty_layout: field_layout,
                     };
                 }
-                Projection::Index(_local) => {
-                    todo!("Index projection requires array type support")
+                Projection::Index(index_local) => {
+                    // Index into an array using a runtime index stored in a local.
+                    //
+                    // The current place must point to an array in memory. We
+                    // load the index value from the local and emit a GEP.
+                    debug!("Index projection using local {:?}", index_local);
+
+                    let array_ty = place_ref.ty_layout.ty;
+                    let (element_ty, _count) = match &*array_ty.0 {
+                        tidec_tir::ty::TirTy::Array(elem, count) => (*elem, *count),
+                        _ => panic!("Index projection on non-array type: {:?}", array_ty),
+                    };
+                    let element_layout = builder.ctx().layout_of(element_ty);
+                    let element_llty = builder.ctx().backend_type_of(element_ty);
+
+                    // Load the index value from the local.
+                    let index_operand = self.codegen_consume(builder, &(*index_local).into());
+                    let index_val = index_operand.operand_val.immediate();
+
+                    let elem_ptr = builder.build_inbounds_gep(
+                        element_llty,
+                        place_ref.place_val.value,
+                        &[index_val],
+                        "array_idx",
+                    );
+
+                    place_ref = PlaceRef {
+                        place_val: crate::tir::PlaceVal {
+                            value: elem_ptr,
+                            align: element_layout.layout.align.abi,
+                        },
+                        ty_layout: element_layout,
+                    };
                 }
                 Projection::ConstantIndex { .. } => {
                     todo!("ConstantIndex projection requires array type support")

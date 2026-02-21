@@ -6,7 +6,7 @@ use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, ValueKind};
 use inkwell::{basic_block::BasicBlock, builder::Builder};
 use tidec_abi::layout::{BackendRepr, Primitive, TyAndLayout};
 use tidec_abi::size_and_align::{Align, Size};
-use tidec_codegen_ssa::tir::{OperandRef, PlaceRef};
+use tidec_codegen_ssa::tir::{OperandRef, OperandVal, PlaceRef, PlaceVal};
 use tidec_codegen_ssa::traits::{BuilderMethods, CodegenBackendTypes};
 use tidec_tir::alloc::Allocation;
 use tidec_tir::syntax::ConstScalar;
@@ -200,7 +200,15 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
 
             OperandRef::new_immediate(llval, place_ref.ty_layout)
         } else {
-            todo!("Handle non-immediate types — when the layout is, for example, `Memory`");
+            // For memory-backed types (structs, arrays), return a Ref
+            // operand pointing to the place. The value stays in memory.
+            OperandRef {
+                operand_val: OperandVal::Ref(PlaceVal {
+                    value: place_ref.place_val.value,
+                    align: place_ref.place_val.align,
+                }),
+                ty_layout: place_ref.ty_layout,
+            }
         }
     }
 
@@ -689,6 +697,58 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
             .build_struct_gep(ty, ptr.into_pointer_value(), field_idx, name)
             .expect("Failed to build struct GEP")
             .into()
+    }
+
+    /// Build an inbounds GEP instruction for array/pointer indexing.
+    ///
+    /// Emits an LLVM `getelementptr inbounds` instruction using the given
+    /// element type and index values.
+    fn build_inbounds_gep(
+        &mut self,
+        ty: Self::Type,
+        ptr: Self::Value,
+        indices: &[Self::Value],
+        name: &str,
+    ) -> Self::Value {
+        // Convert BasicValueEnum indices to IntValue
+        let int_indices: Vec<_> = indices.iter().map(|v| v.into_int_value()).collect();
+        unsafe {
+            self.ll_builder
+                .build_in_bounds_gep(ty, ptr.into_pointer_value(), &int_indices, name)
+                .expect("Failed to build inbounds GEP")
+                .into()
+        }
+    }
+
+    /// Extract a value from an aggregate at the given index.
+    ///
+    /// Maps to LLVM `extractvalue`.
+    fn build_extract_value(&mut self, agg: Self::Value, index: u32, name: &str) -> Self::Value {
+        self.ll_builder
+            .build_extract_value(agg.into_struct_value(), index, name)
+            .expect("Failed to build extract value")
+    }
+
+    /// Insert a value into an aggregate at the given index.
+    ///
+    /// Returns a new aggregate with the value at `index` replaced.
+    /// Maps to LLVM `insertvalue`.
+    fn build_insert_value(
+        &mut self,
+        agg: Self::Value,
+        value: Self::Value,
+        index: u32,
+        name: &str,
+    ) -> Self::Value {
+        let result = self
+            .ll_builder
+            .build_insert_value(agg.into_struct_value(), value, index, name)
+            .expect("Failed to build insert value");
+        // AggregateValueEnum -> BasicValueEnum conversion
+        match result {
+            inkwell::values::AggregateValueEnum::ArrayValue(v) => v.into(),
+            inkwell::values::AggregateValueEnum::StructValue(v) => v.into(),
+        }
     }
 
     fn fn_to_ptr(&mut self, fn_value: Self::FunctionValue) -> Self::Value {
