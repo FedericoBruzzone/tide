@@ -3119,3 +3119,848 @@ fn pipeline_struct_with_array_field() {
         ir
     );
 }
+
+// ====================================================================
+// Memory Operations
+// ====================================================================
+
+/// Address-of a simple local: `int x = 42; int *p = &x;`
+///
+/// ```text
+/// fn main() -> *mut i32 {
+///     _1: i32 = 42;     // mutable (needs alloca)
+///     _0 = &mut _1;     // AddressOf
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_address_of_local() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let ptr_ty = ctx.intern_ty(TirTy::<TirCtx>::RawPtr(i32_ty, Mutability::Mut));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: ptr_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                // _1: i32 (mutable → alloca)
+                LocalData {
+                    ty: i32_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = 42
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Operand(const_i32(ctx, 42)),
+                    ))),
+                    // _0 = &mut _1
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::AddressOf(Mutability::Mut, Place::from(Local::new(1))),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- address of local IR ---\n{}", ir);
+
+    // The function should return a pointer (the alloca address of _1).
+    assert!(
+        ir.contains("ret ptr"),
+        "Should return a pointer value, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("store i32 42"),
+        "Should store 42 into the local, got:\n{}",
+        ir
+    );
+}
+
+/// Address-of a struct field: `&s.x` where s is `{ i32, i32 }`.
+///
+/// ```text
+/// fn main() -> *mut i32 {
+///     _1: { i32, i32 } = Aggregate::Struct(10, 20);
+///     _0 = &mut _1.0;   // AddressOf with Field projection
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_address_of_struct_field() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let fields = ctx.intern_type_list(&[i32_ty, i32_ty]);
+        let struct_ty = ctx.intern_ty(TirTy::<TirCtx>::Struct {
+            fields,
+            packed: false,
+        });
+        let ptr_ty = ctx.intern_ty(TirTy::<TirCtx>::RawPtr(i32_ty, Mutability::Mut));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: ptr_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![LocalData {
+                ty: struct_ty,
+                mutable: true,
+            }]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = { 10, 20 }
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Struct(struct_ty),
+                            vec![const_i32(ctx, 10), const_i32(ctx, 20)],
+                        ),
+                    ))),
+                    // _0 = &mut _1.0
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::AddressOf(
+                            Mutability::Mut,
+                            Place {
+                                local: Local::new(1),
+                                projection: vec![Projection::Field(0, i32_ty)],
+                            },
+                        ),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- address of struct field IR ---\n{}", ir);
+
+    // Should use GEP to get the field address, then return it as a pointer.
+    assert!(
+        ir.contains("getelementptr"),
+        "Should use GEP for field projection, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("ret ptr"),
+        "Should return a pointer, got:\n{}",
+        ir
+    );
+}
+
+/// Address-of an array element: `&arr[idx]`.
+///
+/// ```text
+/// fn main() -> *mut i32 {
+///     _1: [i32; 3] = Aggregate::Array(1, 2, 3);
+///     _2: u64 = 1;
+///     _0 = &imm _1[_2];
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_address_of_array_element() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let u64_ty = ctx.intern_ty(TirTy::<TirCtx>::U64);
+        let array_ty = ctx.intern_ty(TirTy::<TirCtx>::Array(i32_ty, 3));
+        let ptr_ty = ctx.intern_ty(TirTy::<TirCtx>::RawPtr(i32_ty, Mutability::Imm));
+
+        let const_u64_one = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 1,
+                size: NonZero::new(8).unwrap(),
+            })),
+            u64_ty,
+        ));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: ptr_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                LocalData {
+                    ty: array_ty,
+                    mutable: true,
+                },
+                LocalData {
+                    ty: u64_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = [1, 2, 3]
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Array(i32_ty),
+                            vec![const_i32(ctx, 1), const_i32(ctx, 2), const_i32(ctx, 3)],
+                        ),
+                    ))),
+                    // _2 = 1u64
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(2)),
+                        RValue::Operand(const_u64_one),
+                    ))),
+                    // _0 = &imm _1[_2]
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::AddressOf(
+                            Mutability::Imm,
+                            Place {
+                                local: Local::new(1),
+                                projection: vec![Projection::Index(Local::new(2))],
+                            },
+                        ),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- address of array element IR ---\n{}", ir);
+
+    assert!(
+        ir.contains("getelementptr"),
+        "Should use GEP for array indexing, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("ret ptr"),
+        "Should return a pointer, got:\n{}",
+        ir
+    );
+}
+
+/// Null pointer constant: `int *p = NULL;`
+///
+/// ```text
+/// fn main() -> *mut i32 {
+///     _0 = NullPtr;
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_null_ptr_constant() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let ptr_ty = ctx.intern_ty(TirTy::<TirCtx>::RawPtr(i32_ty, Mutability::Mut));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: ptr_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(Operand::Const(ConstOperand::Value(
+                        ConstValue::NullPtr,
+                        ptr_ty,
+                    ))),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- null ptr constant IR ---\n{}", ir);
+
+    assert!(
+        ir.contains("ret ptr null"),
+        "Should return null pointer, got:\n{}",
+        ir
+    );
+}
+
+/// Null pointer stored to a mutable local, then returned.
+///
+/// ```text
+/// fn main() -> *mut i32 {
+///     _1: *mut i32 = NullPtr;  // mutable
+///     _0 = _1;
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_null_ptr_stored_and_loaded() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let ptr_ty = ctx.intern_ty(TirTy::<TirCtx>::RawPtr(i32_ty, Mutability::Mut));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: ptr_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![LocalData {
+                ty: ptr_ty,
+                mutable: true,
+            }]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = NULL
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Operand(Operand::Const(ConstOperand::Value(
+                            ConstValue::NullPtr,
+                            ptr_ty,
+                        ))),
+                    ))),
+                    // _0 = _1
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place::from(Local::new(1)))),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- null ptr stored/loaded IR ---\n{}", ir);
+
+    // The null pointer should be stored and loaded from the alloca.
+    assert!(
+        ir.contains("store ptr null"),
+        "Should store null pointer, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("load ptr"),
+        "Should load pointer from alloca, got:\n{}",
+        ir
+    );
+}
+
+/// Struct assignment via memcpy: `struct Point b = a;`
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: { i32, i32 } = Aggregate::Struct(10, 20);
+///     _2: { i32, i32 };  // mutable
+///     _2 = _1;           // struct copy → memcpy
+///     _0 = _2.0;
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_struct_copy_via_memcpy() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let fields = ctx.intern_type_list(&[i32_ty, i32_ty]);
+        let struct_ty = ctx.intern_ty(TirTy::<TirCtx>::Struct {
+            fields,
+            packed: false,
+        });
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                // _1: { i32, i32 } (source struct)
+                LocalData {
+                    ty: struct_ty,
+                    mutable: true,
+                },
+                // _2: { i32, i32 } (destination struct)
+                LocalData {
+                    ty: struct_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = { 10, 20 }
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Struct(struct_ty),
+                            vec![const_i32(ctx, 10), const_i32(ctx, 20)],
+                        ),
+                    ))),
+                    // _2 = _1 (struct copy: source is OperandVal::Ref → memcpy)
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(2)),
+                        RValue::Operand(Operand::Use(Place::from(Local::new(1)))),
+                    ))),
+                    // _0 = _2.0
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(2),
+                            projection: vec![Projection::Field(0, i32_ty)],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- struct copy (memcpy) IR ---\n{}", ir);
+
+    // The struct assignment should use memcpy.
+    assert!(
+        ir.contains("llvm.memcpy"),
+        "Struct copy should use llvm.memcpy, got:\n{}",
+        ir
+    );
+}
+
+/// Array assignment via memcpy: `int b[3] = a;`
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: [i32; 3] = Aggregate::Array(1, 2, 3);
+///     _2: [i32; 3];  // mutable
+///     _2 = _1;       // array copy → memcpy
+///     return 0;
+/// }
+/// ```
+#[test]
+fn pipeline_array_copy_via_memcpy() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let array_ty = ctx.intern_ty(TirTy::<TirCtx>::Array(i32_ty, 3));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                LocalData {
+                    ty: array_ty,
+                    mutable: true,
+                },
+                LocalData {
+                    ty: array_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = [1, 2, 3]
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Aggregate(
+                            AggregateKind::Array(i32_ty),
+                            vec![const_i32(ctx, 1), const_i32(ctx, 2), const_i32(ctx, 3)],
+                        ),
+                    ))),
+                    // _2 = _1 (array copy → memcpy)
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(2)),
+                        RValue::Operand(Operand::Use(Place::from(Local::new(1)))),
+                    ))),
+                    // return 0
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(const_i32(ctx, 0)),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- array copy (memcpy) IR ---\n{}", ir);
+
+    assert!(
+        ir.contains("llvm.memcpy"),
+        "Array copy should use llvm.memcpy, got:\n{}",
+        ir
+    );
+}
+
+/// Pointer dereference write + read via address-of:
+/// `int x = 42; int *p = &x; *p = 99; return *p;`
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: i32 = 42;       // mutable
+///     _2: *mut i32 = &_1;  // mutable
+///     *_2 = 99;            // store through pointer
+///     _0 = *_2;            // load through pointer
+///     return;
+/// }
+/// ```
+#[test]
+fn pipeline_address_of_deref_write_read() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let ptr_ty = ctx.intern_ty(TirTy::<TirCtx>::RawPtr(i32_ty, Mutability::Mut));
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                // _1: i32
+                LocalData {
+                    ty: i32_ty,
+                    mutable: true,
+                },
+                // _2: *mut i32
+                LocalData {
+                    ty: ptr_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = 42
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Operand(const_i32(ctx, 42)),
+                    ))),
+                    // _2 = &mut _1
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(2)),
+                        RValue::AddressOf(Mutability::Mut, Place::from(Local::new(1))),
+                    ))),
+                    // *_2 = 99
+                    Statement::Assign(Box::new((
+                        Place {
+                            local: Local::new(2),
+                            projection: vec![Projection::Deref],
+                        },
+                        RValue::Operand(const_i32(ctx, 99)),
+                    ))),
+                    // _0 = *_2
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(2),
+                            projection: vec![Projection::Deref],
+                        })),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- address of + deref write/read IR ---\n{}", ir);
+
+    // Should have stores (initial 42, then 99 through pointer)
+    assert!(ir.contains("store i32 42"), "Should store 42, got:\n{}", ir);
+    assert!(
+        ir.contains("store i32 99"),
+        "Should store 99 through pointer, got:\n{}",
+        ir
+    );
+    // Should have loads (load pointer, load through pointer)
+    assert!(
+        ir.contains("load ptr"),
+        "Should load pointer value, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("load i32"),
+        "Should load i32 through pointer, got:\n{}",
+        ir
+    );
+}
+
+/// Select instruction: `build_select(cond, then_val, else_val)`.
+/// Lowered from `_0 = cond ? a : b` using SwitchInt + select.
+///
+/// This test directly exercises select by using SwitchInt with
+/// two branches that assign different values, then returning.
+/// However, we can also test the builder method more directly.
+///
+/// We test: `fn main() -> i32 { _1 = true; _0 = _1 ? 42 : 0; return; }`
+/// using SwitchInt to branch and set _0 in each branch.
+#[test]
+fn pipeline_ternary_via_switch_int() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let bool_ty = ctx.intern_ty(TirTy::<TirCtx>::Bool);
+
+        let const_true = Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 1,
+                size: NonZero::new(1).unwrap(),
+            })),
+            bool_ty,
+        ));
+
+        // bb0: _1 = true; SwitchInt(_1, [1 → bb1, else → bb2])
+        // bb1: _0 = 42; Goto(bb3)
+        // bb2: _0 = 0;  Goto(bb3)
+        // bb3: return
+        let bb0 = BasicBlockData {
+            statements: vec![Statement::Assign(Box::new((
+                Place::from(Local::new(1)),
+                RValue::Operand(const_true),
+            )))],
+            terminator: Terminator::SwitchInt {
+                discr: Operand::Use(Place::from(Local::new(1))),
+                targets: SwitchTargets::if_then(BasicBlock::new(1), BasicBlock::new(2)),
+            },
+        };
+        let bb1 = BasicBlockData {
+            statements: vec![Statement::Assign(Box::new((
+                Place::from(RETURN_LOCAL),
+                RValue::Operand(const_i32(ctx, 42)),
+            )))],
+            terminator: Terminator::Goto {
+                target: BasicBlock::new(3),
+            },
+        };
+        let bb2 = BasicBlockData {
+            statements: vec![Statement::Assign(Box::new((
+                Place::from(RETURN_LOCAL),
+                RValue::Operand(const_i32(ctx, 0)),
+            )))],
+            terminator: Terminator::Goto {
+                target: BasicBlock::new(3),
+            },
+        };
+        let bb3 = BasicBlockData {
+            statements: vec![],
+            terminator: Terminator::Return,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: true, // must be mutable: assigned from two branches (bb1 and bb2)
+            }]),
+            locals: IdxVec::from_raw(vec![LocalData {
+                ty: bool_ty,
+                mutable: true,
+            }]),
+            basic_blocks: IdxVec::from_raw(vec![bb0, bb1, bb2, bb3]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- ternary via SwitchInt IR ---\n{}", ir);
+
+    // Should have conditional branch
+    assert!(
+        ir.contains("br i1"),
+        "Should have conditional branch, got:\n{}",
+        ir
+    );
+    // Both values should appear in the IR
+    assert!(
+        ir.contains("42") && ir.contains("i32 0"),
+        "Should have both branch values 42 and 0, got:\n{}",
+        ir
+    );
+}
+
+/// Null check pattern: `if (p == NULL) { ... } else { ... }`
+///
+/// ```text
+/// fn main() -> i32 {
+///     _1: *mut i32 = NullPtr;   // mutable
+///     _2: *mut i32 = NullPtr;
+///     _3: bool = _1 == _2;      // compare with null
+///     SwitchInt(_3, [1 → bb1, else → bb2])
+///   bb1: _0 = 1; Goto(bb3)     // was null
+///   bb2: _0 = 0; Goto(bb3)     // was not null
+///   bb3: return
+/// }
+/// ```
+#[test]
+fn pipeline_null_check_pattern() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::<TirCtx>::I32);
+        let bool_ty = ctx.intern_ty(TirTy::<TirCtx>::Bool);
+        let ptr_ty = ctx.intern_ty(TirTy::<TirCtx>::RawPtr(i32_ty, Mutability::Mut));
+
+        let null_op = Operand::Const(ConstOperand::Value(ConstValue::NullPtr, ptr_ty));
+
+        let bb0 = BasicBlockData {
+            statements: vec![
+                // _1 = NULL
+                Statement::Assign(Box::new((
+                    Place::from(Local::new(1)),
+                    RValue::Operand(null_op.clone()),
+                ))),
+                // _2 = NULL (for comparison target)
+                Statement::Assign(Box::new((
+                    Place::from(Local::new(2)),
+                    RValue::Operand(Operand::Const(ConstOperand::Value(
+                        ConstValue::NullPtr,
+                        ptr_ty,
+                    ))),
+                ))),
+                // _3 = _1 == _2
+                Statement::Assign(Box::new((
+                    Place::from(Local::new(3)),
+                    RValue::BinaryOp(
+                        BinaryOp::Eq,
+                        Operand::Use(Place::from(Local::new(1))),
+                        Operand::Use(Place::from(Local::new(2))),
+                    ),
+                ))),
+            ],
+            terminator: Terminator::SwitchInt {
+                discr: Operand::Use(Place::from(Local::new(3))),
+                targets: SwitchTargets::if_then(BasicBlock::new(1), BasicBlock::new(2)),
+            },
+        };
+        let bb1 = BasicBlockData {
+            statements: vec![Statement::Assign(Box::new((
+                Place::from(RETURN_LOCAL),
+                RValue::Operand(const_i32(ctx, 1)),
+            )))],
+            terminator: Terminator::Goto {
+                target: BasicBlock::new(3),
+            },
+        };
+        let bb2 = BasicBlockData {
+            statements: vec![Statement::Assign(Box::new((
+                Place::from(RETURN_LOCAL),
+                RValue::Operand(const_i32(ctx, 0)),
+            )))],
+            terminator: Terminator::Goto {
+                target: BasicBlock::new(3),
+            },
+        };
+        let bb3 = BasicBlockData {
+            statements: vec![],
+            terminator: Terminator::Return,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: true, // must be mutable: assigned from two branches (bb1 and bb2)
+            }]),
+            locals: IdxVec::from_raw(vec![
+                LocalData {
+                    ty: ptr_ty,
+                    mutable: true,
+                },
+                LocalData {
+                    ty: ptr_ty,
+                    mutable: true,
+                },
+                LocalData {
+                    ty: bool_ty,
+                    mutable: true,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![bb0, bb1, bb2, bb3]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- null check pattern IR ---\n{}", ir);
+
+    // Should store null, compare, and branch
+    assert!(
+        ir.contains("store ptr null"),
+        "Should store null pointer, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("icmp eq"),
+        "Should compare pointers with icmp eq, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("br i1"),
+        "Should have conditional branch, got:\n{}",
+        ir
+    );
+}
