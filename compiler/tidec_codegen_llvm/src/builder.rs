@@ -650,8 +650,29 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
             _ => panic!("build_icmp called with non-comparison op: {:?}", op),
         };
 
+        // inkwell's build_int_compare only accepts IntValue, but LLVM's icmp
+        // also works on pointer types.  Convert pointers to i64 first.
+        let lhs_int = if lhs.is_pointer_value() {
+            let i64_ty = self.ctx.ll_context.i64_type();
+            self.ll_builder
+                .build_ptr_to_int(lhs.into_pointer_value(), i64_ty, "ptrtoint")
+                .expect("Failed to build ptrtoint for icmp lhs")
+                .into()
+        } else {
+            lhs.into_int_value()
+        };
+        let rhs_int = if rhs.is_pointer_value() {
+            let i64_ty = self.ctx.ll_context.i64_type();
+            self.ll_builder
+                .build_ptr_to_int(rhs.into_pointer_value(), i64_ty, "ptrtoint")
+                .expect("Failed to build ptrtoint for icmp rhs")
+                .into()
+        } else {
+            rhs.into_int_value()
+        };
+
         self.ll_builder
-            .build_int_compare(pred, lhs.into_int_value(), rhs.into_int_value(), "icmp")
+            .build_int_compare(pred, lhs_int, rhs_int, "icmp")
             .expect("Failed to build integer comparison")
             .into()
     }
@@ -754,5 +775,105 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
     fn fn_to_ptr(&mut self, fn_value: Self::FunctionValue) -> Self::Value {
         // In LLVM's opaque pointer model, function values can be used directly as pointers
         fn_value.as_global_value().as_pointer_value().into()
+    }
+
+    // ── Memory intrinsics ────────────────────────────────────────
+
+    /// Copy `size` bytes from `src` to `dst` (non-overlapping).
+    ///
+    /// Emits an LLVM `llvm.memcpy.p0.p0.i64` intrinsic call.
+    fn build_memcpy(
+        &mut self,
+        dst: Self::Value,
+        dst_align: Align,
+        src: Self::Value,
+        src_align: Align,
+        size: Size,
+    ) {
+        let size_val = self
+            .ctx
+            .ll_context
+            .i64_type()
+            .const_int(size.bytes(), false);
+        self.ll_builder
+            .build_memcpy(
+                dst.into_pointer_value(),
+                dst_align.bytes() as u32,
+                src.into_pointer_value(),
+                src_align.bytes() as u32,
+                size_val,
+            )
+            .expect("Failed to build memcpy");
+    }
+
+    /// Copy `size` bytes from `src` to `dst` (may overlap).
+    ///
+    /// Emits an LLVM `llvm.memmove.p0.p0.i64` intrinsic call.
+    fn build_memmove(
+        &mut self,
+        dst: Self::Value,
+        dst_align: Align,
+        src: Self::Value,
+        src_align: Align,
+        size: Size,
+    ) {
+        let size_val = self
+            .ctx
+            .ll_context
+            .i64_type()
+            .const_int(size.bytes(), false);
+        self.ll_builder
+            .build_memmove(
+                dst.into_pointer_value(),
+                dst_align.bytes() as u32,
+                src.into_pointer_value(),
+                src_align.bytes() as u32,
+                size_val,
+            )
+            .expect("Failed to build memmove");
+    }
+
+    /// Fill `size` bytes at `dst` with `val`.
+    ///
+    /// Emits an LLVM `llvm.memset.p0.i64` intrinsic call.
+    fn build_memset(&mut self, dst: Self::Value, val: Self::Value, size: Size, align: Align) {
+        let size_val = self
+            .ctx
+            .ll_context
+            .i64_type()
+            .const_int(size.bytes(), false);
+        self.ll_builder
+            .build_memset(
+                dst.into_pointer_value(),
+                align.bytes() as u32,
+                val.into_int_value(),
+                size_val,
+            )
+            .expect("Failed to build memset");
+    }
+
+    // ── Select ───────────────────────────────────────────────────
+
+    /// Build an LLVM `select` instruction: `cond ? then_val : else_val`.
+    fn build_select(
+        &mut self,
+        cond: Self::Value,
+        then_val: Self::Value,
+        else_val: Self::Value,
+    ) -> Self::Value {
+        self.ll_builder
+            .build_select(cond.into_int_value(), then_val, else_val, "select")
+            .expect("Failed to build select")
+    }
+
+    // ── Null pointer ─────────────────────────────────────────────
+
+    /// Produce a null pointer constant (`ptr null`).
+    fn const_null_ptr(&self) -> Self::Value {
+        self.ctx
+            .ll_context
+            .ptr_type(inkwell::AddressSpace::default())
+            .const_null()
+            .into()
     }
 }

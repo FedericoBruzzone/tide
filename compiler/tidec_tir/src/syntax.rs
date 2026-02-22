@@ -1,4 +1,4 @@
-use crate::{alloc::AllocId, ctx::TirCtx, TirTy};
+use crate::{alloc::AllocId, ctx::TirCtx, ty::Mutability, TirTy};
 use std::num::NonZero;
 use tidec_abi::size_and_align::Size;
 use tidec_utils::idx::Idx;
@@ -209,6 +209,18 @@ pub enum RValue<'ctx> {
     /// RValue::Aggregate(AggregateKind::Array(i32_ty), vec![op0, op1, op2])
     /// ```
     Aggregate(AggregateKind<'ctx>, Vec<Operand<'ctx>>),
+    /// Take the address of a place, producing a raw pointer.
+    ///
+    /// `AddressOf(mutability, place)` evaluates `place` to a memory
+    /// location and returns its address as a `RawPtr(T, mutability)`.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // int x = 42; int *p = &x;
+    /// RValue::AddressOf(Mutability::Mut, Place::from(x_local))
+    /// ```
+    AddressOf(Mutability, Place<'ctx>),
 }
 
 #[derive(Debug, Clone)]
@@ -392,6 +404,13 @@ impl<'ctx> ConstOperand<'ctx> {
 pub enum ConstValue {
     /// A constant value that is a zero-sized type (ZST).
     ZST,
+    /// A null pointer constant.
+    ///
+    /// Represents the C `NULL` / `(void *)0` value. The codegen layer
+    /// emits a target-appropriate null pointer without requiring the
+    /// user to know the pointer size. The `ConstOperand` that wraps
+    /// this must carry a `TirTy::RawPtr(...)` type.
+    NullPtr,
     /// A constant scalar value.
     /// The consts with this variant have typically a layout that is compatible with scalar types, such as integers, floats, or pointers. That is, the backend representation of the constant is a scalar value.
     Scalar(ConstScalar),

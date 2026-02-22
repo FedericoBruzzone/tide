@@ -468,4 +468,57 @@ pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
     /// Convert a function value to a pointer value.
     /// This is used when passing functions as arguments or storing them.
     fn fn_to_ptr(&mut self, fn_value: Self::FunctionValue) -> Self::Value;
+
+    // ── Memory intrinsics ────────────────────────────────────────
+
+    /// Copy `size` bytes from `src` to `dst` (non-overlapping).
+    ///
+    /// Maps to the LLVM `llvm.memcpy` intrinsic. The source and
+    /// destination regions must not overlap; use `build_memmove` when
+    /// overlap is possible.
+    fn build_memcpy(
+        &mut self,
+        dst: Self::Value,
+        dst_align: Align,
+        src: Self::Value,
+        src_align: Align,
+        size: Size,
+    );
+
+    /// Copy `size` bytes from `src` to `dst` (may overlap).
+    ///
+    /// Maps to the LLVM `llvm.memmove` intrinsic.
+    fn build_memmove(
+        &mut self,
+        dst: Self::Value,
+        dst_align: Align,
+        src: Self::Value,
+        src_align: Align,
+        size: Size,
+    );
+
+    /// Fill `size` bytes starting at `dst` with the byte value `val`.
+    ///
+    /// Maps to the LLVM `llvm.memset` intrinsic.
+    fn build_memset(&mut self, dst: Self::Value, val: Self::Value, size: Size, align: Align);
+
+    // ── Select ───────────────────────────────────────────────────
+
+    /// Build a select (ternary) instruction: `cond ? then_val : else_val`.
+    ///
+    /// Maps to the LLVM `select` instruction. `cond` must be an `i1`.
+    fn build_select(
+        &mut self,
+        cond: Self::Value,
+        then_val: Self::Value,
+        else_val: Self::Value,
+    ) -> Self::Value;
+
+    // ── Null pointer ─────────────────────────────────────────────
+
+    /// Produce a null pointer constant.
+    ///
+    /// Returns `ptr null` in LLVM's opaque-pointer model. This does not
+    /// require the caller to know the target pointer size.
+    fn const_null_ptr(&self) -> Self::Value;
 }
