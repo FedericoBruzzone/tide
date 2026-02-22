@@ -1099,3 +1099,128 @@ fn intern_type_list_multiple_elements() {
         assert_eq!(slice[2], bool_ty);
     });
 }
+
+// ---- RValue::AddressOf tests ----
+
+#[test]
+fn rvalue_address_of_variant() {
+    with_ctx(|_ctx| {
+        let rvalue: RValue<'_> = RValue::AddressOf(ty::Mutability::Mut, Place::from(Local::new(1)));
+        assert!(matches!(rvalue, RValue::AddressOf(ty::Mutability::Mut, _)));
+    });
+}
+
+#[test]
+fn rvalue_address_of_immutable() {
+    with_ctx(|_ctx| {
+        let rvalue: RValue<'_> = RValue::AddressOf(ty::Mutability::Imm, Place::from(Local::new(2)));
+        assert!(matches!(rvalue, RValue::AddressOf(ty::Mutability::Imm, _)));
+    });
+}
+
+#[test]
+fn rvalue_address_of_with_projection() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let place = Place {
+            local: Local::new(1),
+            projection: vec![Projection::Field(0, i32_ty)],
+        };
+        let rvalue: RValue<'_> = RValue::AddressOf(ty::Mutability::Mut, place);
+        match rvalue {
+            RValue::AddressOf(m, p) => {
+                assert_eq!(m, ty::Mutability::Mut);
+                assert!(p.try_local().is_none()); // has projection
+                assert_eq!(p.projection.len(), 1);
+            }
+            _ => panic!("Expected AddressOf variant"),
+        }
+    });
+}
+
+#[test]
+fn rvalue_address_of_array_element() {
+    with_ctx(|_ctx| {
+        // &arr[idx] → AddressOf(Imm, Place { local: arr, projection: [Index(idx)] })
+        let place = Place {
+            local: Local::new(1),
+            projection: vec![Projection::Index(Local::new(2))],
+        };
+        let rvalue: RValue<'_> = RValue::AddressOf(ty::Mutability::Imm, place);
+        match rvalue {
+            RValue::AddressOf(m, p) => {
+                assert_eq!(m, ty::Mutability::Imm);
+                assert!(matches!(p.projection[0], Projection::Index(_)));
+            }
+            _ => panic!("Expected AddressOf variant"),
+        }
+    });
+}
+
+// ---- ConstValue::NullPtr tests ----
+
+#[test]
+fn const_value_null_ptr_variant() {
+    let cv = ConstValue::NullPtr;
+    assert_eq!(cv, ConstValue::NullPtr);
+}
+
+#[test]
+fn const_value_null_ptr_ne_zst() {
+    assert_ne!(ConstValue::NullPtr, ConstValue::ZST);
+}
+
+#[test]
+fn const_operand_with_null_ptr() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let ptr_ty = ctx.intern_ty(ty::TirTy::RawPtr(i32_ty, ty::Mutability::Imm));
+        let operand = ConstOperand::Value(ConstValue::NullPtr, ptr_ty);
+        assert_eq!(operand.ty(), ptr_ty);
+        assert_eq!(operand.value(), ConstValue::NullPtr);
+    });
+}
+
+#[test]
+fn operand_const_null_ptr() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let ptr_ty = ctx.intern_ty(ty::TirTy::RawPtr(i32_ty, ty::Mutability::Mut));
+        let op = Operand::Const(ConstOperand::Value(ConstValue::NullPtr, ptr_ty));
+        assert!(matches!(
+            op,
+            Operand::Const(ConstOperand::Value(ConstValue::NullPtr, _))
+        ));
+    });
+}
+
+#[test]
+fn statement_assign_null_ptr_to_place() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let ptr_ty = ctx.intern_ty(ty::TirTy::RawPtr(i32_ty, ty::Mutability::Mut));
+        let stmt = Statement::Assign(Box::new((
+            Place::from(Local::new(0)),
+            RValue::Operand(Operand::Const(ConstOperand::Value(
+                ConstValue::NullPtr,
+                ptr_ty,
+            ))),
+        )));
+        assert!(matches!(stmt, Statement::Assign(_)));
+    });
+}
+
+#[test]
+fn statement_assign_address_of() {
+    with_ctx(|_ctx| {
+        let stmt = Statement::Assign(Box::new((
+            Place::from(Local::new(0)),
+            RValue::AddressOf(ty::Mutability::Mut, Place::from(Local::new(1))),
+        )));
+        match stmt {
+            Statement::Assign(assig) => {
+                assert!(matches!(assig.1, RValue::AddressOf(_, _)));
+            }
+        }
+    });
+}
