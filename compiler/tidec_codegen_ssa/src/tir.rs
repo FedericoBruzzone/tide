@@ -93,6 +93,15 @@ impl<'be, 'ctx, V: std::fmt::Debug> OperandRef<'ctx, V> {
                 assert!(ty_layout.is_zst());
                 OperandVal::Zst
             }
+            ConstValue::NullPtr => {
+                assert!(
+                    lir_ty.is_pointer(),
+                    "ConstValue::NullPtr used with non-pointer type: {:?}",
+                    lir_ty
+                );
+                let be_val = builder.const_null_ptr();
+                OperandVal::Immediate(be_val)
+            }
             ConstValue::Indirect { alloc_id, offset } => {
                 return Self::from_const_alloc(builder, ty_layout, alloc_id, offset);
             }

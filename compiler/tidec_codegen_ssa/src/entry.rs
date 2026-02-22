@@ -178,8 +178,17 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
             OperandVal::Pair(_a, _b) => {
                 todo!("Handle storing scalar pair into a place (e.g., fat pointers)")
             }
-            OperandVal::Ref(_src_place_val) => {
-                todo!("Handle storing a memory reference into a place (requires memcpy)")
+            OperandVal::Ref(src_place_val) => {
+                // The source is a memory-backed value. We need to copy
+                // `size` bytes from the source location to the destination.
+                let size = place_ref.ty_layout.layout.size;
+                builder.build_memcpy(
+                    place_ref.place_val.value,
+                    place_ref.place_val.align,
+                    src_place_val.value,
+                    src_place_val.align,
+                    size,
+                );
             }
         }
     }
@@ -344,6 +353,21 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                     "RValue::Aggregate should be handled by codegen_rvalue (place-based), \
                      not codegen_rvalue_operand. Aggregates are Memory-backed types."
                 );
+            }
+            RValue::AddressOf(mutability, place) => {
+                // Evaluate the place to get its memory address, then return
+                // the pointer as an immediate scalar value.
+                let place_ref = self.codegen_place(builder, place);
+
+                // The result type is a raw pointer to the place's type.
+                let pointee_ty = place_ref.ty_layout.ty;
+                let ptr_ty = builder
+                    .ctx()
+                    .tir_ctx()
+                    .intern_ty(tidec_tir::ty::TirTy::RawPtr(pointee_ty, *mutability));
+                let ptr_layout = builder.ctx().layout_of(ptr_ty);
+
+                OperandRef::new_immediate(place_ref.place_val.value, ptr_layout)
             }
         }
     }
