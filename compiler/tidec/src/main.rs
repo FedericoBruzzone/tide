@@ -178,6 +178,7 @@ fn example_printf<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
 
     TirUnit {
         metadata: unit_metadata,
+        globals: IdxVec::new(),
         bodies: IdxVec::from_raw(vec![printf_body, main_body]),
     }
 }
@@ -296,6 +297,7 @@ fn example1<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
 
     let lir_unit: TirUnit = TirUnit {
         metadata: lit_unit_metadata,
+        globals: IdxVec::new(),
         bodies: lir_bodies,
     };
 

@@ -6,7 +6,7 @@ use tidec_abi::{
 use tidec_tir::{
     TirTy,
     alloc::{AllocId, Allocation, GlobalAlloc},
-    body::{TirBody, TirBodyMetadata, TirUnit},
+    body::{GlobalId, TirBody, TirBodyMetadata, TirGlobal, TirUnit},
     ctx::TirCtx,
     syntax::{ConstScalar, Local, LocalData},
 };
@@ -136,6 +136,24 @@ pub trait CodegenMethods<'ctx>:
 
     /// Get the function value for a function allocation.
     fn get_fn_from_alloc(&self, alloc_id: AllocId) -> Self::FunctionValue;
+
+    // ── Global variable methods ──────────────────────────────────
+
+    /// Define a global variable in the backend module.
+    ///
+    /// This creates the global variable, sets its initializer, linkage,
+    /// visibility, mutability, and unnamed-address attribute, and registers
+    /// it so that function bodies can reference it via `GlobalAlloc::Static`.
+    ///
+    /// Must be called *before* function pre-definition so that bodies can
+    /// resolve global references.
+    fn define_global(&self, global_id: GlobalId, global: &TirGlobal<'ctx>);
+
+    /// Look up a previously defined global variable by its `GlobalId`.
+    ///
+    /// Returns a pointer value to the global. Panics if the global has
+    /// not been defined yet.
+    fn get_global_value(&self, global_id: GlobalId) -> Self::Value;
 }
 
 /// The builder methods for the codegen backend.

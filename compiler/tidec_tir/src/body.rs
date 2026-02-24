@@ -1,4 +1,5 @@
-use crate::syntax::{BasicBlock, BasicBlockData, Local, LocalData};
+use crate::syntax::{BasicBlock, BasicBlockData, ConstValue, Local, LocalData};
+use crate::TirTy;
 use tidec_utils::{idx::Idx, index_vec::IdxVec};
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
@@ -263,6 +264,50 @@ pub struct TirBody<'ctx> {
     pub basic_blocks: IdxVec<BasicBlock, BasicBlockData<'ctx>>,
 }
 
+/// A unique identifier for a global variable within a `TirUnit`.
+///
+/// `GlobalId` is a newtype index into `TirUnit::globals`, following the same
+/// `Idx` pattern as `Local`, `BasicBlock`, `Body`, etc.
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
+pub struct GlobalId(usize);
+
+/// A global variable in the TIR.
+///
+/// Represents a module-level variable (not a local). Global variables are
+/// emitted before any function bodies during codegen so that function code
+/// can reference them.
+///
+/// # C equivalent
+///
+/// ```c
+/// int global_counter = 0;           // mutable, scalar initializer
+/// const int TABLE[3] = {1, 2, 3};   // immutable, aggregate initializer
+/// extern int ext_var;                // declaration (no initializer)
+/// ```
+pub struct TirGlobal<'ctx> {
+    /// The name of the global variable (symbol name).
+    pub name: String,
+    /// The type of the global variable.
+    pub ty: TirTy<'ctx>,
+    /// The constant initializer, if any.
+    ///
+    /// `None` means the global is only declared (e.g. `extern` in C).
+    /// The initializer must be a compile-time constant.
+    pub initializer: Option<ConstValue>,
+    /// Whether the global variable is mutable.
+    ///
+    /// If `false`, the global is marked as a constant in the backend
+    /// (e.g. LLVM `@g = constant ...`). If `true`, it is a regular
+    /// global variable (e.g. LLVM `@g = global ...`).
+    pub mutable: bool,
+    /// The linkage of the global variable.
+    pub linkage: Linkage,
+    /// The visibility of the global variable.
+    pub visibility: Visibility,
+    /// The unnamed-address attribute.
+    pub unnamed_address: UnnamedAddress,
+}
+
 /// The metadata of a TIR unit (module).
 pub struct TirUnitMetadata {
     pub unit_name: String,
@@ -273,6 +318,12 @@ pub struct TirUnit<'ctx> {
     /// The metadata of the unit.
     pub metadata: TirUnitMetadata,
 
+    /// The global variables of the unit.
+    ///
+    /// Globals are emitted before function pre-definitions so that function
+    /// bodies can reference them.
+    pub globals: IdxVec<GlobalId, TirGlobal<'ctx>>,
+
     /// The functions in the unit.
     pub bodies: IdxVec<Body, TirBody<'ctx>>,
 }
@@ -280,6 +331,24 @@ pub struct TirUnit<'ctx> {
 impl Idx for Body {
     fn new(idx: usize) -> Self {
         Body(idx)
+    }
+
+    fn idx(&self) -> usize {
+        self.0
+    }
+
+    fn incr(&mut self) {
+        self.0 += 1;
+    }
+
+    fn incr_by(&mut self, by: usize) {
+        self.0 += by;
+    }
+}
+
+impl Idx for GlobalId {
+    fn new(idx: usize) -> Self {
+        GlobalId(idx)
     }
 
     fn idx(&self) -> usize {
