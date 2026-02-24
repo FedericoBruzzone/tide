@@ -136,6 +136,7 @@ fn create_printf_hello<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
         metadata: TirUnitMetadata {
             unit_name: "main".to_string(),
         },
+        globals: IdxVec::new(),
         bodies: IdxVec::from_raw(vec![printf_body, main_body]),
     }
 }

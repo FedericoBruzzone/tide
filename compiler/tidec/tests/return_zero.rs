@@ -66,6 +66,7 @@ fn create_return_zero<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
         metadata: TirUnitMetadata {
             unit_name: "main".to_string(),
         },
+        globals: IdxVec::new(),
         bodies: IdxVec::from_raw(vec![main_body]),
     }
 }

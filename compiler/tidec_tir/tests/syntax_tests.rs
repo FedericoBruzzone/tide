@@ -1224,3 +1224,258 @@ fn statement_assign_address_of() {
         }
     });
 }
+
+// ---- Global variable & TirUnit tests ----
+
+use std::num::NonZero;
+use tidec_tir::body::{
+    GlobalId, Linkage, TirGlobal, TirUnit, TirUnitMetadata, UnnamedAddress, Visibility,
+};
+use tidec_utils::index_vec::IdxVec;
+
+#[test]
+fn global_id_idx_trait() {
+    let mut g = GlobalId::new(0);
+    assert_eq!(g.idx(), 0);
+    g.incr();
+    assert_eq!(g.idx(), 1);
+    g.incr_by(5);
+    assert_eq!(g.idx(), 6);
+}
+
+#[test]
+fn global_id_equality_and_hash() {
+    use std::collections::HashSet;
+    let a = GlobalId::new(3);
+    let b = GlobalId::new(3);
+    let c = GlobalId::new(4);
+    assert_eq!(a, b);
+    assert_ne!(a, c);
+    let mut set = HashSet::new();
+    set.insert(a);
+    assert!(set.contains(&b));
+    assert!(!set.contains(&c));
+}
+
+#[test]
+fn tir_global_scalar_initializer() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let global = TirGlobal {
+            name: "my_global".to_string(),
+            ty: i32_ty,
+            initializer: Some(ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 42 as u128,
+                size: NonZero::new(4).unwrap(),
+            }))),
+            mutable: true,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+        assert_eq!(global.name, "my_global");
+        assert_eq!(global.ty, i32_ty);
+        assert!(global.mutable);
+        assert!(global.initializer.is_some());
+    });
+}
+
+#[test]
+fn tir_global_no_initializer_declaration() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let global = TirGlobal {
+            name: "extern_var".to_string(),
+            ty: i32_ty,
+            initializer: None,
+            mutable: true,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+        assert!(global.initializer.is_none());
+    });
+}
+
+#[test]
+fn tir_global_constant_immutable() {
+    with_ctx(|ctx| {
+        let i64_ty = ctx.intern_ty(ty::TirTy::I64);
+        let global = TirGlobal {
+            name: "MAGIC".to_string(),
+            ty: i64_ty,
+            initializer: Some(ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0xDEAD_BEEF_u128,
+                size: NonZero::new(8).unwrap(),
+            }))),
+            mutable: false,
+            linkage: Linkage::Private,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::Global,
+        };
+        assert!(!global.mutable);
+        assert!(matches!(global.linkage, Linkage::Private));
+        assert!(matches!(global.unnamed_address, UnnamedAddress::Global));
+    });
+}
+
+#[test]
+fn tir_global_null_ptr_initializer() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let ptr_ty = ctx.intern_ty(ty::TirTy::RawPtr(i32_ty, ty::Mutability::Mut));
+        let global = TirGlobal {
+            name: "null_ptr_global".to_string(),
+            ty: ptr_ty,
+            initializer: Some(ConstValue::NullPtr),
+            mutable: false,
+            linkage: Linkage::Internal,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+        assert!(matches!(global.initializer, Some(ConstValue::NullPtr)));
+        assert!(matches!(global.linkage, Linkage::Internal));
+    });
+}
+
+#[test]
+fn tir_global_zst_initializer() {
+    with_ctx(|ctx| {
+        let unit_ty = ctx.intern_ty(ty::TirTy::Unit);
+        let global = TirGlobal {
+            name: "zst_global".to_string(),
+            ty: unit_ty,
+            initializer: Some(ConstValue::ZST),
+            mutable: false,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+        assert!(matches!(global.initializer, Some(ConstValue::ZST)));
+    });
+}
+
+#[test]
+fn tir_unit_with_globals() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let g1 = TirGlobal {
+            name: "counter".to_string(),
+            ty: i32_ty,
+            initializer: Some(ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0 as u128,
+                size: NonZero::new(4).unwrap(),
+            }))),
+            mutable: true,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+        let g2 = TirGlobal {
+            name: "LIMIT".to_string(),
+            ty: i32_ty,
+            initializer: Some(ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 100 as u128,
+                size: NonZero::new(4).unwrap(),
+            }))),
+            mutable: false,
+            linkage: Linkage::Private,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        let unit = TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "globals_unit".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![g1, g2]),
+            bodies: IdxVec::new(),
+        };
+
+        assert_eq!(unit.globals.len(), 2);
+        assert_eq!(unit.globals[GlobalId::new(0)].name, "counter");
+        assert_eq!(unit.globals[GlobalId::new(1)].name, "LIMIT");
+        assert!(unit.globals[GlobalId::new(0)].mutable);
+        assert!(!unit.globals[GlobalId::new(1)].mutable);
+        assert!(unit.bodies.is_empty());
+    });
+}
+
+#[test]
+fn tir_unit_empty_globals() {
+    let unit: TirUnit<'_> = TirUnit {
+        metadata: TirUnitMetadata {
+            unit_name: "no_globals".to_string(),
+        },
+        globals: IdxVec::new(),
+        bodies: IdxVec::new(),
+    };
+    assert!(unit.globals.is_empty());
+}
+
+#[test]
+fn tir_global_all_linkage_variants() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let linkages = [
+            Linkage::Private,
+            Linkage::Internal,
+            Linkage::External,
+            Linkage::Weak,
+            Linkage::WeakODR,
+            Linkage::LinkOnce,
+            Linkage::LinkOnceODR,
+            Linkage::Common,
+        ];
+        for linkage in linkages {
+            let global = TirGlobal {
+                name: "linkage_test".to_string(),
+                ty: i32_ty,
+                initializer: Some(ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                    data: 0 as u128,
+                    size: NonZero::new(4).unwrap(),
+                }))),
+                mutable: false,
+                linkage,
+                visibility: Visibility::Default,
+                unnamed_address: UnnamedAddress::None,
+            };
+            // Just verify construction doesn't panic
+            let _ = global.name;
+        }
+    });
+}
+
+#[test]
+fn tir_global_indirect_initializer() {
+    with_ctx(|ctx| {
+        use tidec_abi::size_and_align::Size;
+        use tidec_tir::alloc::Allocation;
+
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let alloc = Allocation::from_bytes(&[1, 2, 3, 4]);
+        let alloc_id = ctx.insert_alloc(tidec_tir::alloc::GlobalAlloc::Memory(
+            ctx.intern_alloc(alloc),
+        ));
+
+        let global = TirGlobal {
+            name: "byte_global".to_string(),
+            ty: i32_ty,
+            initializer: Some(ConstValue::Indirect {
+                alloc_id,
+                offset: Size::ZERO,
+            }),
+            mutable: false,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        match &global.initializer {
+            Some(ConstValue::Indirect { alloc_id: aid, .. }) => {
+                assert_eq!(*aid, alloc_id);
+            }
+            _ => panic!("Expected Indirect initializer"),
+        }
+    });
+}
