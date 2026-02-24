@@ -13,8 +13,8 @@ use tidec_abi::size_and_align::Size;
 use tidec_abi::target::{BackendKind, TirTarget};
 use tidec_codegen_llvm::entry::llvm_codegen_to_ir_string;
 use tidec_tir::body::{
-    CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirItemKind, TirUnit,
-    TirUnitMetadata, UnnamedAddress, Visibility,
+    CallConv, DefId, GlobalId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirGlobal,
+    TirItemKind, TirUnit, TirUnitMetadata, UnnamedAddress, Visibility,
 };
 use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
 use tidec_tir::syntax::{
@@ -204,6 +204,7 @@ fn pipeline_return_zero() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -243,6 +244,7 @@ fn pipeline_return_42() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -284,6 +286,7 @@ fn pipeline_void_return() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -322,6 +325,7 @@ fn pipeline_unary_neg() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -350,6 +354,7 @@ fn pipeline_binary_add() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -377,6 +382,7 @@ fn pipeline_binary_sub() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -404,6 +410,7 @@ fn pipeline_binary_mul() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -431,6 +438,7 @@ fn pipeline_binary_div_signed() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -534,6 +542,7 @@ fn pipeline_function_call_printf() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![printf_body, main_body]),
         }
     });
@@ -599,6 +608,7 @@ fn pipeline_goto() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -638,6 +648,7 @@ fn pipeline_unreachable() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -719,6 +730,7 @@ fn pipeline_icmp_eq() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -788,6 +800,7 @@ fn pipeline_icmp_lt_signed() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -888,6 +901,7 @@ fn pipeline_switch_int_bool() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -966,6 +980,7 @@ fn pipeline_switch_int_multi() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1068,6 +1083,7 @@ fn pipeline_loop_pattern() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1171,6 +1187,7 @@ fn pipeline_all_icmp_operators() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1209,6 +1226,7 @@ fn pipeline_srem() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1237,6 +1255,7 @@ fn pipeline_urem() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1265,6 +1284,7 @@ fn pipeline_bitwise_and() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1289,6 +1309,7 @@ fn pipeline_bitwise_or() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1313,6 +1334,7 @@ fn pipeline_bitwise_xor() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1337,6 +1359,7 @@ fn pipeline_shl() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1361,6 +1384,7 @@ fn pipeline_ashr_signed() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1389,6 +1413,7 @@ fn pipeline_lshr_unsigned() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1411,6 +1436,7 @@ fn pipeline_not() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1526,6 +1552,7 @@ fn pipeline_all_aritlogic_ops() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1599,6 +1626,7 @@ fn pipeline_udiv_unsigned() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1639,6 +1667,7 @@ fn pipeline_float_add() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1679,6 +1708,7 @@ fn pipeline_float_mul() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1719,6 +1749,7 @@ fn pipeline_float_rem() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1753,6 +1784,7 @@ fn pipeline_float_neg() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1784,6 +1816,7 @@ fn pipeline_icmp_unsigned() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1845,6 +1878,7 @@ fn pipeline_mutable_local_alloca() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1922,6 +1956,7 @@ fn pipeline_cast_sext_i32_to_i64() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1946,6 +1981,7 @@ fn pipeline_cast_zext_u32_to_u64() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -1977,6 +2013,7 @@ fn pipeline_cast_trunc_i64_to_i32() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2008,6 +2045,7 @@ fn pipeline_cast_fpext_f32_to_f64() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2039,6 +2077,7 @@ fn pipeline_cast_fptrunc_f64_to_f32() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2063,6 +2102,7 @@ fn pipeline_cast_sitofp() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2087,6 +2127,7 @@ fn pipeline_cast_uitofp() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2118,6 +2159,7 @@ fn pipeline_cast_fptosi() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2149,6 +2191,7 @@ fn pipeline_cast_fptoui() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2181,6 +2224,7 @@ fn pipeline_cast_inttoptr() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2214,6 +2258,7 @@ fn pipeline_cast_ptrtoint() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2238,6 +2283,7 @@ fn pipeline_cast_bitcast_i32_to_f32() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2271,6 +2317,7 @@ fn pipeline_cast_ptr_to_ptr() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2304,6 +2351,7 @@ fn pipeline_cast_int_same_width_noop() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2377,6 +2425,7 @@ fn pipeline_struct_aggregate_and_field_access() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2458,6 +2507,7 @@ fn pipeline_struct_read_second_field() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2534,6 +2584,7 @@ fn pipeline_packed_struct() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2617,6 +2668,7 @@ fn pipeline_struct_mixed_types() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2714,6 +2766,7 @@ fn pipeline_array_aggregate_and_index() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2814,6 +2867,7 @@ fn pipeline_array_single_element() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -2897,6 +2951,7 @@ fn pipeline_struct_field_write() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3001,6 +3056,7 @@ fn pipeline_array_element_write() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3102,6 +3158,7 @@ fn pipeline_struct_with_array_field() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3173,6 +3230,7 @@ fn pipeline_address_of_local() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3252,6 +3310,7 @@ fn pipeline_address_of_struct_field() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3348,6 +3407,7 @@ fn pipeline_address_of_array_element() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3403,6 +3463,7 @@ fn pipeline_null_ptr_constant() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3465,6 +3526,7 @@ fn pipeline_null_ptr_stored_and_loaded() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3555,6 +3617,7 @@ fn pipeline_struct_copy_via_memcpy() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3630,6 +3693,7 @@ fn pipeline_array_copy_via_memcpy() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3716,6 +3780,7 @@ fn pipeline_address_of_deref_write_read() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3819,6 +3884,7 @@ fn pipeline_ternary_via_switch_int() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3941,6 +4007,7 @@ fn pipeline_null_check_pattern() {
             metadata: TirUnitMetadata {
                 unit_name: "test".to_string(),
             },
+            globals: IdxVec::new(),
             bodies: IdxVec::from_raw(vec![body]),
         }
     });
@@ -3961,6 +4028,588 @@ fn pipeline_null_check_pattern() {
     assert!(
         ir.contains("br i1"),
         "Should have conditional branch, got:\n{}",
+        ir
+    );
+}
+
+// ── Global Variables ───────────────────────────────────────
+
+/// Helper: build a `ConstValue::Scalar` for an i32.
+fn scalar_i32(value: i32) -> ConstValue {
+    ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+        data: value as u32 as u128,
+        size: NonZero::new(4).unwrap(),
+    }))
+}
+
+/// 6.1 — Constant i32 global zero-initialized
+#[test]
+fn global_constant_i32_zero() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+
+        let global = TirGlobal {
+            name: "MY_CONST".to_string(),
+            ty: i32_ty,
+            initializer: Some(scalar_i32(0)),
+            mutable: false,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        // Minimal main that just returns 0
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(const_i32(ctx, 0)),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![global]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- global constant i32 zero IR ---\n{}", ir);
+    assert!(
+        ir.contains("@MY_CONST = constant i32 0"),
+        "Expected constant i32 global, got:\n{}",
+        ir
+    );
+}
+
+/// 6.2 — Mutable i32 global with scalar initializer
+#[test]
+fn global_mutable_i32_scalar() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+
+        let global = TirGlobal {
+            name: "counter".to_string(),
+            ty: i32_ty,
+            initializer: Some(scalar_i32(42)),
+            mutable: true,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(const_i32(ctx, 0)),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![global]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- global mutable i32 scalar IR ---\n{}", ir);
+    assert!(
+        ir.contains("@counter = global i32 42"),
+        "Expected mutable global with initializer 42, got:\n{}",
+        ir
+    );
+}
+
+/// 6.3 — Private linkage global
+#[test]
+fn global_private_linkage() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+
+        let global = TirGlobal {
+            name: "secret".to_string(),
+            ty: i32_ty,
+            initializer: Some(scalar_i32(99)),
+            mutable: false,
+            linkage: Linkage::Private,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(const_i32(ctx, 0)),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![global]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- global private linkage IR ---\n{}", ir);
+    assert!(
+        ir.contains("@secret = private constant i32 99"),
+        "Expected private constant global, got:\n{}",
+        ir
+    );
+}
+
+/// 6.4 — Global null pointer
+#[test]
+fn global_null_pointer() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+        let ptr_ty = ctx.intern_ty(TirTy::RawPtr(i32_ty, Mutability::Mut));
+
+        let global = TirGlobal {
+            name: "null_global".to_string(),
+            ty: ptr_ty,
+            initializer: Some(ConstValue::NullPtr),
+            mutable: false,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(const_i32(ctx, 0)),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![global]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- global null pointer IR ---\n{}", ir);
+    assert!(
+        ir.contains("@null_global = constant ptr null"),
+        "Expected constant ptr null global, got:\n{}",
+        ir
+    );
+}
+
+/// 6.5 — Global with no initializer (zero-initialized by default)
+#[test]
+fn global_no_initializer_zero_init() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+
+        let global = TirGlobal {
+            name: "uninit_var".to_string(),
+            ty: i32_ty,
+            initializer: None,
+            mutable: true,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(const_i32(ctx, 0)),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![global]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- global no initializer IR ---\n{}", ir);
+    // No initializer → zero init
+    assert!(
+        ir.contains("@uninit_var = global i32 0"),
+        "Expected zero-initialized mutable global, got:\n{}",
+        ir
+    );
+}
+
+/// 6.6 — Multiple globals in one unit
+#[test]
+fn global_multiple_globals() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+        let i64_ty = ctx.intern_ty(TirTy::I64);
+
+        let g1 = TirGlobal {
+            name: "alpha".to_string(),
+            ty: i32_ty,
+            initializer: Some(scalar_i32(10)),
+            mutable: true,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        let g2 = TirGlobal {
+            name: "beta".to_string(),
+            ty: i64_ty,
+            initializer: Some(ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 200u128,
+                size: NonZero::new(8).unwrap(),
+            }))),
+            mutable: false,
+            linkage: Linkage::Private,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(const_i32(ctx, 0)),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![g1, g2]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- multiple globals IR ---\n{}", ir);
+    assert!(
+        ir.contains("@alpha = global i32 10"),
+        "Expected alpha global, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("@beta = private constant i64 200"),
+        "Expected beta private constant, got:\n{}",
+        ir
+    );
+}
+
+/// 6.7 — Function body loads from a global via GlobalAlloc::Static
+#[test]
+fn global_load_from_body() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+        let ptr_ty = ctx.intern_ty(TirTy::RawPtr(i32_ty, Mutability::Imm));
+
+        // Define a global variable
+        let global = TirGlobal {
+            name: "the_global".to_string(),
+            ty: i32_ty,
+            initializer: Some(scalar_i32(77)),
+            mutable: false,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        // Create an alloc_id for the global so the body can reference it
+        let alloc_id = ctx.intern_static(GlobalId::new(0));
+
+        // main() returns i32:
+        //   _1: *const i32 = &the_global   (via Indirect referencing Static alloc)
+        //   _2: i32 = load _1
+        //   _0 = _2
+        //   return
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: true,
+            }]),
+            locals: IdxVec::from_raw(vec![
+                // _1: pointer to the global
+                LocalData {
+                    ty: ptr_ty,
+                    mutable: false,
+                },
+                // _2: loaded value
+                LocalData {
+                    ty: i32_ty,
+                    mutable: false,
+                },
+            ]),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![
+                    // _1 = &the_global (via Indirect with Static alloc_id)
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(1)),
+                        RValue::Operand(Operand::Const(ConstOperand::Value(
+                            ConstValue::Indirect {
+                                alloc_id,
+                                offset: Size::ZERO,
+                            },
+                            ptr_ty,
+                        ))),
+                    ))),
+                    // _2 = *_1 (load from the pointer)
+                    Statement::Assign(Box::new((
+                        Place::from(Local::new(2)),
+                        RValue::Operand(Operand::Use(Place {
+                            local: Local::new(1),
+                            projection: vec![Projection::Deref],
+                        })),
+                    ))),
+                    // _0 = _2
+                    Statement::Assign(Box::new((
+                        Place::from(RETURN_LOCAL),
+                        RValue::Operand(Operand::Use(Place::from(Local::new(2)))),
+                    ))),
+                ],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![global]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- global load from body IR ---\n{}", ir);
+    // The global should be defined
+    assert!(
+        ir.contains("@the_global = constant i32 77"),
+        "Expected the_global definition, got:\n{}",
+        ir
+    );
+    // The function should reference the global (load from it)
+    assert!(
+        ir.contains("@the_global"),
+        "Function body should reference @the_global, got:\n{}",
+        ir
+    );
+}
+
+/// 6.8 — Internal linkage global
+#[test]
+fn global_internal_linkage() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+
+        let global = TirGlobal {
+            name: "internal_var".to_string(),
+            ty: i32_ty,
+            initializer: Some(scalar_i32(5)),
+            mutable: true,
+            linkage: Linkage::Internal,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(const_i32(ctx, 0)),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![global]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- global internal linkage IR ---\n{}", ir);
+    assert!(
+        ir.contains("@internal_var = internal global i32 5"),
+        "Expected internal linkage global, got:\n{}",
+        ir
+    );
+}
+
+/// 6.9 — f64 global with scalar initializer
+#[test]
+fn global_f64_scalar() {
+    let ir = compile_to_ir(|ctx| {
+        let f64_ty = ctx.intern_ty(TirTy::F64);
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+
+        let global = TirGlobal {
+            name: "pi_approx".to_string(),
+            ty: f64_ty,
+            initializer: Some(ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 3.14_f64.to_bits() as u128,
+                size: NonZero::new(8).unwrap(),
+            }))),
+            mutable: false,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(const_i32(ctx, 0)),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![global]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- global f64 scalar IR ---\n{}", ir);
+    // LLVM prints f64 constants as double hex or decimal
+    assert!(
+        ir.contains("@pi_approx = constant double"),
+        "Expected f64 constant global, got:\n{}",
+        ir
+    );
+}
+
+/// 6.10 — unnamed_addr global
+#[test]
+fn global_unnamed_addr() {
+    let ir = compile_to_ir(|ctx| {
+        let i32_ty = ctx.intern_ty(TirTy::I32);
+
+        let global = TirGlobal {
+            name: "unnamed_g".to_string(),
+            ty: i32_ty,
+            initializer: Some(scalar_i32(1)),
+            mutable: false,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::Global,
+        };
+
+        let body = TirBody {
+            metadata: main_metadata(DefId(0)),
+            ret_and_args: IdxVec::from_raw(vec![LocalData {
+                ty: i32_ty,
+                mutable: false,
+            }]),
+            locals: IdxVec::new(),
+            basic_blocks: IdxVec::from_raw(vec![BasicBlockData {
+                statements: vec![Statement::Assign(Box::new((
+                    Place::from(RETURN_LOCAL),
+                    RValue::Operand(const_i32(ctx, 0)),
+                )))],
+                terminator: Terminator::Return,
+            }]),
+        };
+
+        TirUnit {
+            metadata: TirUnitMetadata {
+                unit_name: "test".to_string(),
+            },
+            globals: IdxVec::from_raw(vec![global]),
+            bodies: IdxVec::from_raw(vec![body]),
+        }
+    });
+
+    println!("--- global unnamed_addr IR ---\n{}", ir);
+    assert!(
+        ir.contains("unnamed_addr"),
+        "Expected unnamed_addr attribute, got:\n{}",
+        ir
+    );
+    assert!(
+        ir.contains("@unnamed_g"),
+        "Expected global name, got:\n{}",
         ir
     );
 }
