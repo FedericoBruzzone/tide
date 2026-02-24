@@ -30,7 +30,7 @@ use tidec_codegen_ssa::traits::{
     BackendTypeOf, BuilderMethods, CodegenBackend, CodegenBackendTypes, CodegenMethods,
     DefineCodegenMethods, FnAbiOf, LayoutOf, PreDefineCodegenMethods,
 };
-use tidec_tir::body::{DefId, TirBody, TirBodyMetadata, TirUnit};
+use tidec_tir::body::{DefId, GlobalId, TirBody, TirBodyMetadata, TirGlobal, TirUnit};
 use tidec_tir::syntax::{Local, LocalData, RETURN_LOCAL};
 
 // TODO: Add filelds from rustc/compiler/rustc_codegen_llvm/src/context.rs
@@ -48,6 +48,12 @@ pub struct CodegenCtx<'ctx, 'll> {
     // TODO: Probably we could remove this and use only the module to find functions (more efficient?).
     // Something like: `self.ll_module.get_function(<name>)` (see `get_fn`).
     pub instances: RefCell<HashMap<DefId, AnyValueEnum<'ll>>>,
+    /// A map from `GlobalId` to the LLVM global pointer value.
+    ///
+    /// Populated by `define_global` before function bodies are compiled,
+    /// so that operands referencing `GlobalAlloc::Static(global_id)` can
+    /// be resolved to the backend value.
+    pub global_values: RefCell<HashMap<GlobalId, BasicValueEnum<'ll>>>,
 }
 
 impl<'ll, 'ctx> Deref for CodegenCtx<'ctx, 'll> {
@@ -221,6 +227,7 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
             ll_module,
             lir_ctx,
             instances: RefCell::new(HashMap::new()),
+            global_values: RefCell::new(HashMap::new()),
         }
     }
 
@@ -255,6 +262,51 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
         is_varargs: bool,
     ) -> FunctionType<'ll> {
         self.ll_context.void_type().fn_type(param_tys, is_varargs)
+    }
+
+    /// Create a constant backend value from a `RawScalarValue` and its layout,
+    /// suitable for use as a global variable initializer.
+    ///
+    /// Unlike the builder-level `const_scalar_to_backend_value`, this does
+    /// **not** require a positioned builder and produces only LLVM constant
+    /// expressions.
+    pub fn const_scalar_to_backend_value_internal(
+        &self,
+        raw: &tidec_tir::syntax::RawScalarValue,
+        ty_layout: TyAndLayout<'ctx, TirTy<'ctx>>,
+    ) -> BasicValueEnum<'ll> {
+        use tidec_abi::layout::Primitive;
+
+        let llty = ty_layout.ty.into_basic_type(self);
+        let be_repr = ty_layout.backend_repr.to_primitive();
+        let bitsize = if ty_layout.is_bool() {
+            1
+        } else {
+            ty_layout.size.bits()
+        };
+
+        let bits = raw.to_bits(ty_layout.size);
+        let base_int = self.ll_context.custom_width_int_type(bitsize as u32);
+        let words = [(bits & u64::MAX as u128) as u64, (bits >> 64) as u64];
+        let llval = base_int.const_int_arbitrary_precision(&words);
+
+        if let Primitive::Pointer(_) = be_repr {
+            llval.const_to_pointer(llty.into_pointer_type()).into()
+        } else if llty.is_float_type() {
+            // Reconstruct the float from its raw bits and use `const_float`.
+            // `const_float` accepts `f64`; for f32 types, LLVM's `LLVMConstReal`
+            // rounds the value back to the correct precision.
+            let float_type = llty.into_float_type();
+            let float_val = if bitsize == 32 {
+                f32::from_bits(bits as u32) as f64
+            } else {
+                f64::from_bits(bits as u64)
+            };
+            float_type.const_float(float_val).into()
+        } else {
+            // For integers, the const int is already the right type
+            llval.into()
+        }
     }
 
     /// Creates a target machine for code generation and sets the module's
@@ -443,7 +495,12 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
     #[instrument(skip(self, lir_unit))]
     // TODO: Move as a method of `CodegenCtx`?
     fn compile_tir_unit<'a, B: BuilderMethods<'a, 'ctx>>(&self, lir_unit: TirUnit<'ctx>) {
-        // Predefine the functions. That is, create the function declarations.
+        // 1. Define global variables first so that function bodies can reference them.
+        for (global_id, global) in lir_unit.globals.iter_enumerated() {
+            self.define_global(global_id, global);
+        }
+
+        // 2. Predefine the functions. That is, create the function declarations.
         for lir_body in &lir_unit.bodies {
             self.predefine_body(&lir_body.metadata, &lir_body.ret_and_args);
         }
@@ -451,7 +508,7 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
         // Destructure the TirUnit to get the bodies
         let TirUnit { bodies, .. } = lir_unit;
 
-        // Now that all functions are pre-defined, we can compile the bodies.
+        // 3. Now that all globals and functions are pre-defined, compile the bodies.
         for lir_body in bodies {
             // Skip external declarations (like libc functions) that have no body.
             if lir_body.metadata.is_declaration {
@@ -585,5 +642,90 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
             }
             _ => panic!("Expected Function allocation, got {:?}", global_alloc),
         }
+    }
+
+    fn define_global(&self, global_id: GlobalId, global: &TirGlobal<'ctx>) {
+        use tidec_tir::syntax::{ConstScalar, ConstValue};
+
+        let ll_ty = global.ty.into_basic_type(self);
+        let ll_global = self.ll_module.add_global(ll_ty, None, &global.name);
+
+        // Set initializer
+        if let Some(ref init) = global.initializer {
+            match init {
+                ConstValue::ZST => {
+                    // Zero-sized: use undef (no real storage needed, but LLVM
+                    // still requires an initializer for definitions).
+                    ll_global.set_initializer(&ll_ty.const_zero());
+                }
+                ConstValue::NullPtr => {
+                    let ptr_ty = self.ll_context.ptr_type(inkwell::AddressSpace::default());
+                    ll_global.set_initializer(&ptr_ty.const_null());
+                }
+                ConstValue::Scalar(scalar) => match scalar {
+                    ConstScalar::Value(raw) => {
+                        let layout = self.layout_of(global.ty);
+                        let val = self.const_scalar_to_backend_value_internal(raw, layout);
+                        ll_global.set_initializer(&val);
+                    }
+                },
+                ConstValue::Indirect { alloc_id, .. } => {
+                    let alloc_data = self.global_alloc(*alloc_id);
+                    match alloc_data {
+                        GlobalAlloc::Memory(interned_alloc) => {
+                            let bytes = interned_alloc.bytes();
+                            let i8_type = self.ll_context.i8_type();
+                            let byte_values: Vec<_> = bytes
+                                .iter()
+                                .map(|&b| i8_type.const_int(b as u64, false))
+                                .collect();
+                            let const_array = i8_type.const_array(&byte_values);
+                            ll_global.set_initializer(&const_array);
+                        }
+                        _ => panic!(
+                            "Global {} has Indirect initializer pointing to non-Memory alloc",
+                            global.name
+                        ),
+                    }
+                }
+            }
+        } else {
+            // No initializer — zero-initialize (like C's default for globals).
+            ll_global.set_initializer(&ll_ty.const_zero());
+        }
+
+        // Set mutability
+        ll_global.set_constant(!global.mutable);
+
+        // Set linkage
+        let linkage = global.linkage.into_linkage();
+        ll_global.set_linkage(linkage);
+
+        // Set visibility
+        let visibility = global.visibility.into_visibility();
+        ll_global.as_pointer_value(); // ensure global value exists
+        ll_global.set_visibility(visibility);
+
+        // Set unnamed address
+        let unnamed_addr = global.unnamed_address.into_unnamed_address();
+        ll_global.set_unnamed_address(unnamed_addr);
+
+        debug!(
+            "define_global(name: {}, ty: {:?}, mutable: {}, linkage: {:?})",
+            global.name, global.ty, global.mutable, linkage
+        );
+
+        // Store the global's pointer value so function bodies can reference it.
+        self.global_values
+            .borrow_mut()
+            .insert(global_id, ll_global.as_pointer_value().into());
+    }
+
+    fn get_global_value(&self, global_id: GlobalId) -> BasicValueEnum<'ll> {
+        *self
+            .global_values
+            .borrow()
+            .get(&global_id)
+            .unwrap_or_else(|| panic!("Global {:?} not found in global_values map", global_id))
     }
 }

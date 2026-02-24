@@ -8,7 +8,7 @@
 //! - [`Allocation`]: The actual bytes and metadata of an allocation
 //! - [`GlobalAlloc`]: What an allocation can represent (memory, function, etc.)
 
-use crate::body::DefId;
+use crate::body::{DefId, GlobalId};
 use crate::TirAllocation;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
@@ -166,8 +166,12 @@ pub enum GlobalAlloc<'ctx> {
     Memory(TirAllocation<'ctx>),
     /// A reference to a function.
     Function(DefId),
-    /// A static variable.
-    Static(DefId),
+    /// A reference to a global variable (module-level static).
+    ///
+    /// The `GlobalId` indexes into the `TirUnit::globals` vector. During
+    /// codegen this is resolved to the backend global value (e.g. an LLVM
+    /// `@global` pointer).
+    Static(GlobalId),
 }
 
 impl<'ctx> GlobalAlloc<'ctx> {

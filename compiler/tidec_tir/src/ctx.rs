@@ -503,6 +503,15 @@ impl<'ctx> TirCtx<'ctx> {
             .insert(GlobalAlloc::Function(def_id))
     }
 
+    /// Register a global variable (static) as a global allocation.
+    /// Returns the `AllocId` that can be used in `ConstValue::Indirect`
+    /// to reference this global from function bodies.
+    pub fn intern_static(&self, global_id: crate::body::GlobalId) -> AllocId {
+        self.intern_ctx
+            .alloc_map()
+            .insert(GlobalAlloc::Static(global_id))
+    }
+
     /// Register a global allocation directly.
     /// Returns the `AllocId` for the allocation.
     pub fn insert_alloc(&self, alloc: GlobalAlloc<'ctx>) -> AllocId {

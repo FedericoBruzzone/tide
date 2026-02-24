@@ -145,8 +145,14 @@ impl<'be, 'ctx, V: std::fmt::Debug> OperandRef<'ctx, V> {
                     ty_layout,
                 }
             }
-            GlobalAlloc::Static(_def_id) => {
-                todo!("Handle static allocations")
+            GlobalAlloc::Static(global_id) => {
+                // For static/global variable references, retrieve the backend
+                // pointer that was created during `define_global`.
+                let ptr_val = builder.ctx().get_global_value(*global_id);
+                OperandRef {
+                    operand_val: OperandVal::Immediate(ptr_val),
+                    ty_layout,
+                }
             }
         }
     }
