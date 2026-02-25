@@ -657,7 +657,6 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
             self.ll_builder
                 .build_ptr_to_int(lhs.into_pointer_value(), i64_ty, "ptrtoint")
                 .expect("Failed to build ptrtoint for icmp lhs")
-                .into()
         } else {
             lhs.into_int_value()
         };
@@ -666,7 +665,6 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
             self.ll_builder
                 .build_ptr_to_int(rhs.into_pointer_value(), i64_ty, "ptrtoint")
                 .expect("Failed to build ptrtoint for icmp rhs")
-                .into()
         } else {
             rhs.into_int_value()
         };

@@ -154,7 +154,7 @@ impl ArenaDropless {
             return &[];
         }
 
-        let size = std::mem::size_of::<T>() * slice.len();
+        let size = std::mem::size_of_val(slice);
         let align = std::mem::align_of::<T>();
 
         // Ensure we have enough space in the current chunk.
