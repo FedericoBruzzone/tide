@@ -330,9 +330,14 @@ pub fn codegen_tir_body<'a, 'ctx: 'a, B: BuilderMethods<'a, 'ctx>>(
                     LocalRef::OperandRef(OperandRef::new_zst(layout))
                 } else if layout.is_memory() || local_data.mutable {
                     // Memory types need stack allocation (alloca).
-                    // Mutable locals also require alloca because they may be
-                    // reassigned across basic blocks — SSA operand refs are
-                    // write-once and cannot represent multiple definitions.
+                    //
+                    // Mutable locals also require alloca: in our codegen model
+                    // an `OperandRef` is a single SSA value that is bound once
+                    // (write-once). A mutable local may be assigned in multiple
+                    // basic blocks (e.g., loop counter updated each iteration),
+                    // which means it needs a memory location that can be stored
+                    // to repeatedly. LLVM's `mem2reg` pass will later promote
+                    // eligible allocas back to SSA φ-nodes.
                     LocalRef::PlaceRef(PlaceRef::alloca(&mut start_builder, layout))
                 } else {
                     LocalRef::PendingOperandRef

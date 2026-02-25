@@ -128,6 +128,12 @@ pub struct TargetDataLayout {
 impl Default for TargetDataLayout {
     /// Default data layout for a 64-bit little-endian target (e.g. x86_64).
     ///
+    /// This is used as the fallback when no target-specific data layout is
+    /// provided via [`TirTarget`]. For targets with different endianness or
+    /// alignment requirements (e.g. big-endian MIPS, AArch64 with different
+    /// vector alignments), callers should construct a custom
+    /// [`TargetDataLayout`] rather than relying on this default.
+    ///
     /// All alignment values are in **bytes** (matching the `AbiAndPrefAlign`
     /// contract). The LLVM data-layout string generation converts them to
     /// bits as required by the LLVM specification.

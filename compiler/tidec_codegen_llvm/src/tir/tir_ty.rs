@@ -47,14 +47,19 @@ impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
                 .into()
             }
             ty::TirTy::Array(element_ty, count) => {
+                assert!(
+                    *count <= u32::MAX as u64,
+                    "Array count {count} exceeds u32::MAX; inkwell's array_type only supports u32 sizes"
+                );
+                let len = *count as u32;
                 let elem_llty = element_ty.into_basic_type(ctx);
                 match elem_llty {
-                    BasicTypeEnum::IntType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
-                    BasicTypeEnum::FloatType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
-                    BasicTypeEnum::PointerType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
-                    BasicTypeEnum::StructType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
-                    BasicTypeEnum::ArrayType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
-                    BasicTypeEnum::VectorType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)).into(),
+                    BasicTypeEnum::IntType(t) => BasicTypeEnum::ArrayType(t.array_type(len)).into(),
+                    BasicTypeEnum::FloatType(t) => BasicTypeEnum::ArrayType(t.array_type(len)).into(),
+                    BasicTypeEnum::PointerType(t) => BasicTypeEnum::ArrayType(t.array_type(len)).into(),
+                    BasicTypeEnum::StructType(t) => BasicTypeEnum::ArrayType(t.array_type(len)).into(),
+                    BasicTypeEnum::ArrayType(t) => BasicTypeEnum::ArrayType(t.array_type(len)).into(),
+                    BasicTypeEnum::VectorType(t) => BasicTypeEnum::ArrayType(t.array_type(len)).into(),
                     #[allow(unreachable_patterns)]
                     _ => panic!("Unsupported array element type: {:?}", elem_llty),
                 }
@@ -96,14 +101,19 @@ impl<'ctx, 'll> BasicTypesUtils<'ctx, 'll> for TirTy<'ctx> {
                 BasicTypeEnum::StructType(ctx.ll_context.struct_type(&basic_fields, *packed))
             }
             ty::TirTy::Array(element_ty, count) => {
+                assert!(
+                    *count <= u32::MAX as u64,
+                    "Array count {count} exceeds u32::MAX; inkwell's array_type only supports u32 sizes"
+                );
+                let len = *count as u32;
                 let elem_llty = element_ty.into_basic_type(ctx);
                 match elem_llty {
-                    BasicTypeEnum::IntType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
-                    BasicTypeEnum::FloatType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
-                    BasicTypeEnum::PointerType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
-                    BasicTypeEnum::StructType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
-                    BasicTypeEnum::ArrayType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
-                    BasicTypeEnum::VectorType(t) => BasicTypeEnum::ArrayType(t.array_type(*count as u32)),
+                    BasicTypeEnum::IntType(t) => BasicTypeEnum::ArrayType(t.array_type(len)),
+                    BasicTypeEnum::FloatType(t) => BasicTypeEnum::ArrayType(t.array_type(len)),
+                    BasicTypeEnum::PointerType(t) => BasicTypeEnum::ArrayType(t.array_type(len)),
+                    BasicTypeEnum::StructType(t) => BasicTypeEnum::ArrayType(t.array_type(len)),
+                    BasicTypeEnum::ArrayType(t) => BasicTypeEnum::ArrayType(t.array_type(len)),
+                    BasicTypeEnum::VectorType(t) => BasicTypeEnum::ArrayType(t.array_type(len)),
                     #[allow(unreachable_patterns)]
                     _ => panic!("Unsupported array element type: {:?}", elem_llty),
                 }

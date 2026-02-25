@@ -593,7 +593,14 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
         let int_ty = int_val.get_type();
         let ll_cases: Vec<_> = cases
             .iter()
-            .map(|&(val, bb)| (int_ty.const_int(val as u64, false), bb))
+            .map(|&(val, bb)| {
+                assert!(
+                    val <= u64::MAX as u128,
+                    "Switch discriminant value {val} exceeds u64::MAX; \
+                     128-bit discriminants are not yet supported"
+                );
+                (int_ty.const_int(val as u64, false), bb)
+            })
             .collect();
         self.ll_builder
             .build_switch(int_val, otherwise, &ll_cases)
