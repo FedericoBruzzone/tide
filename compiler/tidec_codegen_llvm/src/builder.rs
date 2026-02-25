@@ -658,19 +658,22 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
         };
 
         // inkwell's build_int_compare only accepts IntValue, but LLVM's icmp
-        // also works on pointer types.  Convert pointers to i64 first.
+        // also works on pointer types.  Convert pointers to an integer type
+        // whose width matches the target's pointer size.
+        let ptr_int_ty =
+            self.ctx.ll_context.custom_width_int_type(
+                self.ctx.lir_ctx.target().data_layout.pointer_size.bits() as u32,
+            );
         let lhs_int = if lhs.is_pointer_value() {
-            let i64_ty = self.ctx.ll_context.i64_type();
             self.ll_builder
-                .build_ptr_to_int(lhs.into_pointer_value(), i64_ty, "ptrtoint")
+                .build_ptr_to_int(lhs.into_pointer_value(), ptr_int_ty, "ptrtoint")
                 .expect("Failed to build ptrtoint for icmp lhs")
         } else {
             lhs.into_int_value()
         };
         let rhs_int = if rhs.is_pointer_value() {
-            let i64_ty = self.ctx.ll_context.i64_type();
             self.ll_builder
-                .build_ptr_to_int(rhs.into_pointer_value(), i64_ty, "ptrtoint")
+                .build_ptr_to_int(rhs.into_pointer_value(), ptr_int_ty, "ptrtoint")
                 .expect("Failed to build ptrtoint for icmp rhs")
         } else {
             rhs.into_int_value()
@@ -748,17 +751,28 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
 
     /// Extract a value from an aggregate at the given index.
     ///
-    /// Maps to LLVM `extractvalue`.
+    /// Maps to LLVM `extractvalue`. Works for both struct and array aggregates.
     fn build_extract_value(&mut self, agg: Self::Value, index: u32, name: &str) -> Self::Value {
-        self.ll_builder
-            .build_extract_value(agg.into_struct_value(), index, name)
-            .expect("Failed to build extract value")
+        if agg.is_struct_value() {
+            self.ll_builder
+                .build_extract_value(agg.into_struct_value(), index, name)
+                .expect("Failed to build extract value (struct)")
+        } else if agg.is_array_value() {
+            self.ll_builder
+                .build_extract_value(agg.into_array_value(), index, name)
+                .expect("Failed to build extract value (array)")
+        } else {
+            panic!(
+                "build_extract_value called with non-aggregate value: {:?}",
+                agg
+            )
+        }
     }
 
     /// Insert a value into an aggregate at the given index.
     ///
     /// Returns a new aggregate with the value at `index` replaced.
-    /// Maps to LLVM `insertvalue`.
+    /// Maps to LLVM `insertvalue`. Works for both struct and array aggregates.
     fn build_insert_value(
         &mut self,
         agg: Self::Value,
@@ -766,10 +780,20 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
         index: u32,
         name: &str,
     ) -> Self::Value {
-        let result = self
-            .ll_builder
-            .build_insert_value(agg.into_struct_value(), value, index, name)
-            .expect("Failed to build insert value");
+        let result = if agg.is_struct_value() {
+            self.ll_builder
+                .build_insert_value(agg.into_struct_value(), value, index, name)
+                .expect("Failed to build insert value (struct)")
+        } else if agg.is_array_value() {
+            self.ll_builder
+                .build_insert_value(agg.into_array_value(), value, index, name)
+                .expect("Failed to build insert value (array)")
+        } else {
+            panic!(
+                "build_insert_value called with non-aggregate value: {:?}",
+                agg
+            )
+        };
         // AggregateValueEnum -> BasicValueEnum conversion
         match result {
             inkwell::values::AggregateValueEnum::ArrayValue(v) => v.into(),

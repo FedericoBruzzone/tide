@@ -422,7 +422,10 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
             CastKind::FloatToFloat => {
                 let src_bits = src_ref.ty_layout.size.bits();
                 let dst_bits = dest_layout.size.bits();
-                if src_bits > dst_bits {
+                if src_bits == dst_bits {
+                    // Same width — no-op (e.g. identity cast).
+                    src_val
+                } else if src_bits > dst_bits {
                     builder.build_fptrunc(src_val, dest_llty)
                 } else {
                     builder.build_fpext(src_val, dest_llty)
@@ -717,8 +720,13 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
 
         let otherwise_bb = self.get_or_insert_bb(targets.otherwise);
 
-        if targets.len() == 1 {
-            // Boolean-style conditional branch (if / else).
+        if targets.len() == 1 && discr_ref.ty_layout.is_bool() {
+            // Boolean single-arm switch → conditional branch optimisation.
+            //
+            // This applies only when the discriminant is already `i1` (Bool)
+            // and the single arm tests for `1` (true). For non-boolean
+            // single-arm switches we fall through to `build_switch` to avoid
+            // passing a non-`i1` value to `build_conditional_br`.
             trace!("Optimizing single-arm switch to conditional branch");
             let (_, then_bb_idx) = targets.values[0];
             let then_bb = self.get_or_insert_bb(then_bb_idx);

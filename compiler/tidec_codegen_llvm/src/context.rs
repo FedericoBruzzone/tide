@@ -673,6 +673,9 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
                     let alloc_data = self.global_alloc(*alloc_id);
                     match alloc_data {
                         GlobalAlloc::Memory(interned_alloc) => {
+                            // Indirect initializers carry raw bytes. We must
+                            // set the global's type to `[N x i8]` so the
+                            // initializer's type matches the global's type.
                             let bytes = interned_alloc.bytes();
                             let i8_type = self.ll_context.i8_type();
                             let byte_values: Vec<_> = bytes
@@ -680,7 +683,37 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
                                 .map(|&b| i8_type.const_int(b as u64, false))
                                 .collect();
                             let const_array = i8_type.const_array(&byte_values);
+
+                            // Remove the old global (wrong type) and recreate
+                            // with the correct `[N x i8]` type so LLVM accepts
+                            // the initializer.
+                            let byte_array_ty = i8_type.array_type(bytes.len() as u32);
+                            ll_global.as_pointer_value(); // ensure it exists
+                            unsafe { ll_global.delete() };
+                            let ll_global =
+                                self.ll_module.add_global(byte_array_ty, None, &global.name);
                             ll_global.set_initializer(&const_array);
+
+                            // Replicate mutability/linkage/visibility below
+                            // (the original ll_global is deleted).
+                            ll_global.set_constant(!global.mutable);
+                            ll_global.set_linkage(global.linkage.into_linkage());
+                            ll_global.set_visibility(global.visibility.into_visibility());
+                            ll_global
+                                .set_unnamed_address(global.unnamed_address.into_unnamed_address());
+
+                            // Store the global early and return the normal
+                            // attribute-setting. Code below would fail because
+                            // `ll_global` was deleted and recreated.
+                            debug!(
+                                "define_global(Indirect, name: {}, byte_len: {})",
+                                global.name,
+                                bytes.len()
+                            );
+                            self.global_values
+                                .borrow_mut()
+                                .insert(global_id, ll_global.as_pointer_value().into());
+                            return;
                         }
                         _ => panic!(
                             "Global {} has Indirect initializer pointing to non-Memory alloc",
@@ -690,8 +723,14 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
                 }
             }
         } else {
-            // No initializer — zero-initialize (like C's default for globals).
-            ll_global.set_initializer(&ll_ty.const_zero());
+            // No initializer — this is a declaration (e.g. `extern int x;`).
+            // Do NOT set an initializer: LLVM treats globals without an
+            // initializer as external declarations, which is exactly the
+            // semantics documented by `TirGlobal::initializer: None`.
+            // Setting `const_zero()` here would turn the declaration into a
+            // definition and cause duplicate-symbol errors at link time.
+            //
+            // Linkage/visibility/mutability are set by the common code below.
         }
 
         // Set mutability
