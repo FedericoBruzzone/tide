@@ -107,8 +107,15 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                                 // the value of an operand ref. However, we can assign to a ZST
                                 // because it has no value.
                                 if !operand_ref.ty_layout.is_zst() {
-                                    // TODO: handle this error properly
-                                    panic!("Cannot assign to non-ZST operand ref");
+                                    // This is a bug in SSA construction: non-ZST locals that
+                                    // receive assignments should be PlaceRef (alloca'd) or
+                                    // PendingOperandRef, never a resolved OperandRef.
+                                    panic!(
+                                        "Cannot assign to non-ZST operand ref (local {:?}, ty {:?}). \
+                                         This is likely a bug in local allocation — mutable or \
+                                         multi-assigned locals should use PlaceRef.",
+                                        local, operand_ref.ty_layout.ty
+                                    );
                                 }
 
                                 // For ZST, we can just ignore the assignment
@@ -116,6 +123,11 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
                                 // to handle any side effects it may have.
                                 // For example, if the rvalue is a function call
                                 // that may panic, we need to codegen it.
+                                //
+                                // Aggregates are skipped here because aggregate
+                                // construction requires a place-based path (GEP +
+                                // store per field). ZST aggregates have no fields
+                                // to store, so there is nothing to codegen.
                                 if !matches!(rvalue, RValue::Aggregate(_, _)) {
                                     self.codegen_rvalue_operand(builder, rvalue);
                                 }
@@ -707,7 +719,7 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
 
         if targets.len() == 1 {
             // Boolean-style conditional branch (if / else).
-            trace!("Optimizing switch with if/else statement");
+            trace!("Optimizing single-arm switch to conditional branch");
             let (_, then_bb_idx) = targets.values[0];
             let then_bb = self.get_or_insert_bb(then_bb_idx);
             builder.build_conditional_br(discr_val, then_bb, otherwise_bb);
