@@ -4240,9 +4240,13 @@ fn global_null_pointer() {
     );
 }
 
-/// 6.5 — Global with no initializer (zero-initialized by default)
+/// 6.5 — Global with no initializer (external declaration)
+///
+/// When `initializer` is `None`, the global is treated as an external
+/// declaration (like `extern int x;` in C). LLVM should emit it without
+/// an initializer so the linker resolves it from another translation unit.
 #[test]
-fn global_no_initializer_zero_init() {
+fn global_no_initializer_extern_decl() {
     let ir = compile_to_ir(|ctx| {
         let i32_ty = ctx.intern_ty(TirTy::I32);
 
@@ -4281,11 +4285,11 @@ fn global_no_initializer_zero_init() {
         }
     });
 
-    println!("--- global no initializer IR ---\n{}", ir);
-    // No initializer → zero init
+    println!("--- global no initializer (extern decl) IR ---\n{}", ir);
+    // No initializer → external declaration (no `= ...` part).
     assert!(
-        ir.contains("@uninit_var = global i32 0"),
-        "Expected zero-initialized mutable global, got:\n{}",
+        ir.contains("@uninit_var = external global i32"),
+        "Expected external declaration for global without initializer, got:\n{}",
         ir
     );
 }
