@@ -154,6 +154,7 @@ impl<'ctx> UnitBuilder<'ctx> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::BuilderCtx;
     use tidec_abi::target::{BackendKind, TirTarget};
     use tidec_tir::body::*;
     use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
@@ -220,7 +221,8 @@ mod tests {
     #[test]
     fn add_single_body() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
 
             let mut ub = UnitBuilder::new("one_fn");
             let body = make_simple_body("my_fn", i32_ty);
@@ -238,8 +240,9 @@ mod tests {
     #[test]
     fn add_multiple_bodies() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
-            let unit_ty = ctx.intern_ty(ty::TirTy::Unit);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
+            let unit_ty = builder_ctx.unit();
 
             let mut ub = UnitBuilder::new("multi_fn");
             let b0 = ub.add_body(make_simple_body("fn_a", i32_ty));
@@ -262,7 +265,8 @@ mod tests {
     #[test]
     fn add_global_scalar() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
 
             let mut ub = UnitBuilder::new("with_global");
 
@@ -295,7 +299,8 @@ mod tests {
     #[test]
     fn add_global_declaration_no_initializer() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
 
             let mut ub = UnitBuilder::new("extern_mod");
             let global = TirGlobal {
@@ -317,7 +322,8 @@ mod tests {
     #[test]
     fn get_global_by_id() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
 
             let mut ub = UnitBuilder::new("get_global");
             let global = TirGlobal {
@@ -338,7 +344,8 @@ mod tests {
     #[test]
     fn get_global_mut_by_id() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
 
             let mut ub = UnitBuilder::new("mutate_global");
             let global = TirGlobal {
@@ -360,7 +367,8 @@ mod tests {
     #[test]
     fn get_body_by_id() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
 
             let mut ub = UnitBuilder::new("get_body");
             let body_id = ub.add_body(make_simple_body("fn_x", i32_ty));
@@ -371,7 +379,8 @@ mod tests {
     #[test]
     fn get_body_mut_by_id() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
 
             let mut ub = UnitBuilder::new("mutate_body");
             let body_id = ub.add_body(make_simple_body("fn_orig", i32_ty));
@@ -383,8 +392,9 @@ mod tests {
     #[test]
     fn unit_with_globals_and_bodies() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
-            let unit_ty = ctx.intern_ty(ty::TirTy::Unit);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
+            let unit_ty = builder_ctx.unit();
 
             let mut ub = UnitBuilder::new("full_module");
 
@@ -445,7 +455,8 @@ mod tests {
     #[test]
     fn multiple_globals_indices_are_sequential() {
         with_ctx(|ctx| {
-            let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
 
             let mut ub = UnitBuilder::new("sequential");
             let make_global = |name: &str| TirGlobal {
@@ -471,10 +482,9 @@ mod tests {
     #[test]
     fn global_with_null_ptr_initializer() {
         with_ctx(|ctx| {
-            let ptr_ty = ctx.intern_ty(ty::TirTy::RawPtr(
-                ctx.intern_ty(ty::TirTy::I32),
-                ty::Mutability::Imm,
-            ));
+            let builder_ctx = BuilderCtx::new(ctx);
+            let i32_ty = builder_ctx.i32();
+            let ptr_ty = builder_ctx.ptr_imm(i32_ty);
 
             let mut ub = UnitBuilder::new("null_ptr_mod");
             let gid = ub.add_global(TirGlobal {

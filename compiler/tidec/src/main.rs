@@ -1,8 +1,10 @@
 use std::num::NonZero;
 // #[macro_use] extern crate tidec_utils;
 //
+//
 use tidec_abi::size_and_align::Size;
 use tidec_abi::target::{BackendKind, TirTarget};
+use tidec_builder::BuilderCtx;
 use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
 
 use tidec_tir::body::{
@@ -14,7 +16,6 @@ use tidec_tir::syntax::{
     BasicBlock, BasicBlockData, ConstOperand, ConstScalar, ConstValue, Local, LocalData, Operand,
     Place, RValue, RawScalarValue, Statement, Terminator, UnaryOp, RETURN_LOCAL,
 };
-use tidec_tir::ty::{Mutability, TirTy};
 use tidec_utils::idx::Idx;
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
@@ -32,10 +33,11 @@ use tracing::{debug, instrument};
 ///   ld main.o -o a.out -lSystem -syslibroot `xcrun --show-sdk-path` \
 ///   ./a.out; echo $?
 fn example_printf<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
-    // Intern the pointer type for i8 (for printf's char* parameter)
-    let i8_ty = tir_ctx.intern_ty(TirTy::<TirCtx>::I8);
-    let ptr_i8_ty = tir_ctx.intern_ty(TirTy::RawPtr(i8_ty, Mutability::Imm));
-    let i32_ty = tir_ctx.intern_ty(TirTy::<TirCtx>::I32);
+    // Use BuilderCtx to construct all TIR types
+    let builder_ctx = BuilderCtx::new(*tir_ctx);
+    let i8_ty = builder_ctx.i8();
+    let ptr_i8_ty = builder_ctx.ptr_imm(i8_ty);
+    let i32_ty = builder_ctx.i32();
 
     // Declare printf as an external function
     // int printf(const char* format, ...)
@@ -265,10 +267,14 @@ fn example1<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
         is_varargs: false,
         is_declaration: false,
     };
+
+    let builder_ctx = BuilderCtx::new(*tir_ctx);
+    let i32_ty = builder_ctx.i32();
+
     let lir_bodies = IdxVec::from_raw(vec![TirBody {
         metadata: lir_body_metadata,
         ret_and_args: IdxVec::from_raw(vec![LocalData {
-            ty: tir_ctx.intern_ty(TirTy::<TirCtx>::I32),
+            ty: i32_ty,
             mutable: false,
         }]),
         locals: IdxVec::new(),
@@ -285,7 +291,7 @@ fn example1<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
                             data: 10u128,
                             size: NonZero::new(4).unwrap(), // 4 bytes for i32
                         })),
-                        tir_ctx.intern_ty(TirTy::<TirCtx>::I32),
+                        i32_ty,
                     )),
                 ),
             )))],
