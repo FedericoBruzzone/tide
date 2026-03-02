@@ -28,6 +28,7 @@ pub fn llvm_codegen_lir_unit<'ctx>(tir_ctx: TirCtx<'ctx>, lir_unit: TirUnit<'ctx
 /// This is the same pipeline as [`llvm_codegen_lir_unit`] but instead of
 /// emitting to a file it returns the textual IR. Useful for testing the
 /// codegen output without requiring a linker.
+#[instrument(level = "debug", skip(tir_ctx, lir_unit), fields(unit = %lir_unit.metadata.unit_name))]
 pub fn llvm_codegen_to_ir_string<'ctx>(tir_ctx: TirCtx<'ctx>, lir_unit: TirUnit<'ctx>) -> String {
     let ll_context = Context::create();
     let ll_module = ll_context.create_module(&lir_unit.metadata.unit_name);

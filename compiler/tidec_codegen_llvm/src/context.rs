@@ -20,7 +20,7 @@ use tidec_tir::alloc::{AllocId, Allocation, GlobalAlloc};
 use tidec_tir::ctx::{EmitKind, TirCtx};
 use tidec_tir::TirTy;
 use tidec_utils::index_vec::IdxVec;
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument, trace};
 
 use crate::tir::tir_body_metadata::{
     CallConvUtils, LinkageUtils, UnnamedAddressUtils, VisibilityUtils,
@@ -492,16 +492,28 @@ impl<'ctx, 'll> CodegenMethods<'ctx> for CodegenCtx<'ctx, 'll> {
         self.lir_ctx
     }
 
-    #[instrument(skip(self, lir_unit))]
+    #[instrument(level = "info", skip(self, lir_unit), fields(unit = %lir_unit.metadata.unit_name, bodies = lir_unit.bodies.len(), globals = lir_unit.globals.len()))]
     // TODO: Move as a method of `CodegenCtx`?
     fn compile_tir_unit<'a, B: BuilderMethods<'a, 'ctx>>(&self, lir_unit: TirUnit<'ctx>) {
+        info!(
+            "Starting codegen for unit `{}` ({} globals, {} bodies)",
+            lir_unit.metadata.unit_name,
+            lir_unit.globals.len(),
+            lir_unit.bodies.len()
+        );
+
         // 1. Define global variables first so that function bodies can reference them.
         for (global_id, global) in lir_unit.globals.iter_enumerated() {
+            trace!(?global_id, name = %global.name, "Defining global");
             self.define_global(global_id, global);
         }
 
         // 2. Predefine the functions. That is, create the function declarations.
         for lir_body in &lir_unit.bodies {
+            debug!(
+                "Predefining body `{}` (is_declaration = {}, linkage = {:?})",
+                lir_body.metadata.name, lir_body.metadata.is_declaration, lir_body.metadata.linkage
+            );
             self.predefine_body(&lir_body.metadata, &lir_body.ret_and_args);
         }
 

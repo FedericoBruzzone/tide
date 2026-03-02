@@ -5,7 +5,7 @@ use tidec_utils::{idx::Idx, index_vec::IdxVec};
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub struct DefId(pub usize);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 /// Specifies the linkage of a symbol.
 /// All Global Variables and Functions have one of the following types of linkage.
 ///

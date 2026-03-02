@@ -17,7 +17,7 @@ use tidec_tir::syntax::{
 use tidec_tir::ty::{Mutability, TirTy};
 use tidec_utils::idx::Idx;
 use tidec_utils::index_vec::IdxVec;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 /// Example with printf that prints "Hello, World! 42\n" and returns 0.
 /// ```c
@@ -206,6 +206,7 @@ fn main() {
     codegen_lir_unit(tir_ctx, lir_unit);
 }
 
+#[instrument(level = "info", skip(lir_ctx, lir_unit), fields(unit = %lir_unit.metadata.unit_name))]
 pub fn codegen_lir_unit<'ctx>(lir_ctx: TirCtx<'ctx>, lir_unit: TirUnit<'ctx>) {
     match lir_ctx.backend_kind() {
         BackendKind::Llvm => llvm_codegen_lir_unit(lir_ctx, lir_unit),

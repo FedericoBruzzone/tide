@@ -292,7 +292,7 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         }
     }
 
-    #[instrument(level = "debug", skip(self, builder))]
+    #[instrument(level = "trace", skip(self, builder, rvalue))]
     /// Codegen the given TIR rvalue and return the corresponding operand reference.
     /// It generates the code for the rvalue and returns the operand reference.
     pub fn codegen_rvalue_operand(
@@ -300,14 +300,22 @@ impl<'ll, 'ctx, B: BuilderMethods<'ll, 'ctx>> FnCtx<'ll, 'ctx, B> {
         builder: &mut B,
         rvalue: &RValue<'ctx>,
     ) -> OperandRef<'ctx, B::Value> {
+        trace!("codegen_rvalue_operand: {:?}", rvalue);
         match rvalue {
-            RValue::Operand(operand) => self.codegen_operand(builder, operand),
+            RValue::Operand(operand) => {
+                trace!("RValue::Operand");
+                self.codegen_operand(builder, operand)
+            }
             RValue::UnaryOp(unary_op, operand) => {
                 let OperandRef {
                     operand_val,
                     ty_layout,
                 } = self.codegen_operand(builder, operand);
                 let is_float = ty_layout.ty.is_floating_point();
+                debug!(
+                    "RValue::UnaryOp {:?} on {:?} (float = {})",
+                    unary_op, ty_layout.ty, is_float
+                );
 
                 // Only immediate operands are supported because we need to generate
                 // a single instruction for the unary operation.

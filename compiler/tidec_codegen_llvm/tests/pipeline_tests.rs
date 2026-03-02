@@ -6,7 +6,6 @@
 //!
 //! **Requirements**: LLVM 20.1 must be available (set
 //! `LLVM_SYS_201_PREFIX` or have `llvm-config` on `PATH`).
-
 use std::num::NonZero;
 
 use tidec_abi::size_and_align::Size;
@@ -1451,6 +1450,7 @@ fn pipeline_not() {
 
 /// Composite test: all arithmetic & logic ops using mutable locals.
 /// Verifies that remainder, bitwise, shift, and NOT all appear in the IR.
+#[allow(clippy::vec_init_then_push)]
 #[test]
 fn pipeline_all_aritlogic_ops() {
     let ir = compile_to_ir(|ctx| {
@@ -4521,7 +4521,7 @@ fn global_f64_scalar() {
             name: "pi_approx".to_string(),
             ty: f64_ty,
             initializer: Some(ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
-                data: 3.14_f64.to_bits() as u128,
+                data: std::f64::consts::PI.to_bits() as u128,
                 size: NonZero::new(8).unwrap(),
             }))),
             mutable: false,
