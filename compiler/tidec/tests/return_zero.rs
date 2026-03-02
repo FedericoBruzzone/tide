@@ -5,6 +5,7 @@ mod common;
 use std::num::NonZero;
 
 use common::{TestContext, TestRunner};
+use tidec_builder::BuilderCtx;
 use tidec_tir::body::{
     CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirItemKind, TirUnit,
     TirUnitMetadata, UnnamedAddress, Visibility,
@@ -14,12 +15,12 @@ use tidec_tir::syntax::{
     BasicBlockData, ConstOperand, ConstScalar, ConstValue, LocalData, Operand, Place, RValue,
     RawScalarValue, Statement, Terminator, UnaryOp, RETURN_LOCAL,
 };
-use tidec_tir::ty::TirTy;
 use tidec_utils::index_vec::IdxVec;
 
 /// Create a simple main function that returns 0.
 fn create_return_zero<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
-    let i32_ty = tir_ctx.intern_ty(TirTy::<TirCtx>::I32);
+    let builder_ctx = BuilderCtx::new(*tir_ctx);
+    let i32_ty = builder_ctx.i32();
 
     let main_metadata = TirBodyMetadata {
         def_id: DefId(0),

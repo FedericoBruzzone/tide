@@ -6,6 +6,7 @@ use std::num::NonZero;
 
 use common::{TestContext, TestRunner};
 use tidec_abi::size_and_align::Size;
+use tidec_builder::BuilderCtx;
 use tidec_tir::body::{
     CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirItemKind, TirUnit,
     TirUnitMetadata, UnnamedAddress, Visibility,
@@ -15,15 +16,15 @@ use tidec_tir::syntax::{
     BasicBlock, BasicBlockData, ConstOperand, ConstScalar, ConstValue, Local, LocalData, Operand,
     Place, RValue, RawScalarValue, Statement, Terminator, UnaryOp, RETURN_LOCAL,
 };
-use tidec_tir::ty::{Mutability, TirTy};
 use tidec_utils::idx::Idx;
 use tidec_utils::index_vec::IdxVec;
 
 /// Create a program that calls printf and returns 0.
 fn create_printf_hello<'a>(tir_ctx: &TirCtx<'a>) -> TirUnit<'a> {
-    let i8_ty = tir_ctx.intern_ty(TirTy::<TirCtx>::I8);
-    let ptr_i8_ty = tir_ctx.intern_ty(TirTy::RawPtr(i8_ty, Mutability::Imm));
-    let i32_ty = tir_ctx.intern_ty(TirTy::<TirCtx>::I32);
+    let builder_ctx = BuilderCtx::new(*tir_ctx);
+    let i8_ty = builder_ctx.i8();
+    let ptr_i8_ty = builder_ctx.ptr_imm(i8_ty);
+    let i32_ty = builder_ctx.i32();
 
     // Declare printf
     let printf_def_id = DefId(0);
