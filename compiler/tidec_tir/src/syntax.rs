@@ -373,6 +373,21 @@ pub enum Operand<'ctx> {
     Const(ConstOperand<'ctx>),
 }
 
+impl<'ctx> Operand<'ctx> {
+    /// Create a `Use` operand that reads from the given local (no projection).
+    ///
+    /// This is a shorthand for `Operand::Use(Place::from(local))`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let op = Operand::use_local(Local::new(1));
+    /// ```
+    pub fn use_local(local: Local) -> Self {
+        Operand::Use(Place::from(local))
+    }
+}
+
 #[derive(Debug, Clone)]
 /// Semantically, a constant is already a value; it cannot change.
 // TODO(bruzzone): Add more variants for different constant types.
@@ -601,6 +616,22 @@ pub struct LocalData<'ctx> {
 pub enum Statement<'ctx> {
     // An assignment statement. We use a Box to keep the size small.
     Assign(Box<(Place<'ctx>, RValue<'ctx>)>),
+}
+
+impl<'ctx> Statement<'ctx> {
+    /// Create an assignment statement: `place = rvalue`.
+    ///
+    /// This is a convenience constructor that avoids the need to manually
+    /// box the `(Place, RValue)` tuple.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let stmt = Statement::assign(Place::from(local), RValue::Operand(op));
+    /// ```
+    pub fn assign(place: Place<'ctx>, rvalue: RValue<'ctx>) -> Self {
+        Statement::Assign(Box::new((place, rvalue)))
+    }
 }
 
 #[derive(Debug, Clone)]
