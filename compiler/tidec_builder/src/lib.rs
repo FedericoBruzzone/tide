@@ -44,5 +44,5 @@ pub mod unit_builder;
 
 pub use basic_block_builder::BasicBlockBuilder;
 pub use builder_ctx::BuilderCtx;
-pub use function_builder::FunctionBuilder;
+pub use function_builder::{BuildError, FunctionBuilder};
 pub use unit_builder::UnitBuilder;
