@@ -239,6 +239,40 @@ pub struct TirBodyMetadata {
     pub is_declaration: bool,
 }
 
+impl TirBodyMetadata {
+    /// Create metadata for a regular function with sensible defaults.
+    ///
+    /// Defaults:
+    /// - `kind`: `TirBodyKind::Item(TirItemKind::Function)`
+    /// - `inlined`: `false`
+    /// - `linkage`: `Linkage::External`
+    /// - `visibility`: `Visibility::Default`
+    /// - `unnamed_address`: `UnnamedAddress::None`
+    /// - `call_conv`: `CallConv::C`
+    /// - `is_varargs`: `false`
+    /// - `is_declaration`: `false`
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let meta = TirBodyMetadata::function(DefId(0), "my_fn");
+    /// ```
+    pub fn function(def_id: DefId, name: impl Into<String>) -> Self {
+        Self {
+            def_id,
+            name: name.into(),
+            kind: TirBodyKind::Item(TirItemKind::Function),
+            inlined: false,
+            linkage: Linkage::External,
+            visibility: Visibility::Default,
+            unnamed_address: UnnamedAddress::None,
+            call_conv: CallConv::C,
+            is_varargs: false,
+            is_declaration: false,
+        }
+    }
+}
+
 #[derive(Eq, PartialEq)]
 /// A body identifier in the TIR. A body can be a function, a closure, etc.
 pub struct Body(usize);
