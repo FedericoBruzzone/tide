@@ -27,11 +27,16 @@
 //! });
 //! ```
 
+use std::cell::Cell;
+use std::num::NonZero;
+
 use tidec_abi::layout::TyAndLayout;
+use tidec_abi::size_and_align::Size;
 use tidec_abi::target::{BackendKind, TirTarget};
 use tidec_tir::alloc::AllocId;
 use tidec_tir::body::{DefId, GlobalId};
 use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
+use tidec_tir::syntax::{ConstOperand, ConstScalar, ConstValue, Operand, RawScalarValue};
 use tidec_tir::ty::{self, Mutability};
 use tidec_tir::{TirAllocation, TirTy, TirTypeList};
 
@@ -51,6 +56,8 @@ use tidec_tir::body::TirBodyMetadata;
 /// live for `'ctx`.
 pub struct BuilderCtx<'ctx> {
     ctx: TirCtx<'ctx>,
+    /// Monotonically-increasing counter for generating unique [`DefId`]s.
+    next_def_id: Cell<usize>,
 }
 
 impl<'ctx> BuilderCtx<'ctx> {
@@ -59,7 +66,10 @@ impl<'ctx> BuilderCtx<'ctx> {
     /// For most use cases, prefer [`with_default`](Self::with_default) or
     /// [`with_target`](Self::with_target) which handle arena setup automatically.
     pub fn new(ctx: TirCtx<'ctx>) -> Self {
-        Self { ctx }
+        Self {
+            ctx,
+            next_def_id: Cell::new(0),
+        }
     }
 
     /// Run a closure with a default `BuilderCtx`.
@@ -309,6 +319,191 @@ impl<'ctx> BuilderCtx<'ctx> {
     }
 
     // =========================================================================
+    // DefId allocation
+    // =========================================================================
+
+    /// Allocate a fresh, unique [`DefId`].
+    ///
+    /// Each call returns a new `DefId` with a monotonically-increasing index.
+    /// This is the recommended way to obtain `DefId`s for multi-function
+    /// programs instead of tracking the counter manually.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let id_a = ctx.fresh_def_id(); // DefId(0)
+    /// let id_b = ctx.fresh_def_id(); // DefId(1)
+    /// ```
+    pub fn fresh_def_id(&self) -> DefId {
+        let id = self.next_def_id.get();
+        self.next_def_id.set(id + 1);
+        DefId(id)
+    }
+
+    // =========================================================================
+    // Constant constructors
+    // =========================================================================
+
+    /// Create a constant `i8` operand.
+    pub fn const_i8(&self, v: i8) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u8 as u128,
+                size: NonZero::new(1).unwrap(),
+            })),
+            self.i8(),
+        ))
+    }
+
+    /// Create a constant `i16` operand.
+    pub fn const_i16(&self, v: i16) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u16 as u128,
+                size: NonZero::new(2).unwrap(),
+            })),
+            self.i16(),
+        ))
+    }
+
+    /// Create a constant `i32` operand.
+    pub fn const_i32(&self, v: i32) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u32 as u128,
+                size: NonZero::new(4).unwrap(),
+            })),
+            self.i32(),
+        ))
+    }
+
+    /// Create a constant `i64` operand.
+    pub fn const_i64(&self, v: i64) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u64 as u128,
+                size: NonZero::new(8).unwrap(),
+            })),
+            self.i64(),
+        ))
+    }
+
+    /// Create a constant `u8` operand.
+    pub fn const_u8(&self, v: u8) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u128,
+                size: NonZero::new(1).unwrap(),
+            })),
+            self.u8(),
+        ))
+    }
+
+    /// Create a constant `u16` operand.
+    pub fn const_u16(&self, v: u16) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u128,
+                size: NonZero::new(2).unwrap(),
+            })),
+            self.u16(),
+        ))
+    }
+
+    /// Create a constant `u32` operand.
+    pub fn const_u32(&self, v: u32) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u128,
+                size: NonZero::new(4).unwrap(),
+            })),
+            self.u32(),
+        ))
+    }
+
+    /// Create a constant `u64` operand.
+    pub fn const_u64(&self, v: u64) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u128,
+                size: NonZero::new(8).unwrap(),
+            })),
+            self.u64(),
+        ))
+    }
+
+    /// Create a constant `bool` operand.
+    ///
+    /// `true` is represented as `1`, `false` as `0`, both as 1-byte scalars.
+    pub fn const_bool(&self, v: bool) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: u128::from(v),
+                size: NonZero::new(1).unwrap(),
+            })),
+            self.bool(),
+        ))
+    }
+
+    /// Create a constant `f32` operand.
+    ///
+    /// The float is stored as its IEEE 754 bit pattern in a 4-byte scalar.
+    pub fn const_f32(&self, v: f32) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v.to_bits() as u128,
+                size: NonZero::new(4).unwrap(),
+            })),
+            self.f32(),
+        ))
+    }
+
+    /// Create a constant `f64` operand.
+    ///
+    /// The float is stored as its IEEE 754 bit pattern in an 8-byte scalar.
+    pub fn const_f64(&self, v: f64) -> Operand<'ctx> {
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v.to_bits() as u128,
+                size: NonZero::new(8).unwrap(),
+            })),
+            self.f64(),
+        ))
+    }
+
+    // =========================================================================
+    // Function operand helper
+    // =========================================================================
+
+    /// Create an operand that refers to a function by its [`DefId`].
+    ///
+    /// Internally this interns the function as a global allocation and wraps
+    /// it in a `ConstValue::Indirect` with `Size::ZERO` offset, which is the
+    /// canonical representation for function references in TIR.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let fn_op = ctx.fn_operand(def_id, fn_ptr_ty);
+    /// fb.set_terminator(entry, Terminator::Call {
+    ///     func: fn_op,
+    ///     args: vec![...],
+    ///     destination: Place::from(dest),
+    ///     target: cont,
+    /// });
+    /// ```
+    pub fn fn_operand(&self, def_id: DefId, ty: TirTy<'ctx>) -> Operand<'ctx> {
+        let alloc_id = self.intern_fn(def_id);
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Indirect {
+                alloc_id,
+                offset: Size::ZERO,
+            },
+            ty,
+        ))
+    }
+
+    // =========================================================================
     // Builder factory methods
     // =========================================================================
 
@@ -325,7 +520,7 @@ impl<'ctx> BuilderCtx<'ctx> {
     /// let body = fb.build();
     /// ```
     pub fn function_builder(&self, metadata: TirBodyMetadata) -> FunctionBuilder<'ctx> {
-        FunctionBuilder::new(metadata)
+        FunctionBuilder::with_ctx(metadata, self.ctx)
     }
 
     /// Create a new unit (module) builder with the given name.

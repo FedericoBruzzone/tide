@@ -43,9 +43,12 @@
 //! ```
 
 use crate::basic_block_builder::BasicBlockBuilder;
-use tidec_tir::body::{TirBody, TirBodyMetadata};
+use std::num::NonZero;
+use tidec_tir::body::{CallConv, Linkage, TirBody, TirBodyMetadata};
+use tidec_tir::ctx::TirCtx;
 use tidec_tir::syntax::{
-    BasicBlock, BasicBlockData, Local, LocalData, Statement, Terminator, RETURN_LOCAL,
+    BasicBlock, BasicBlockData, ConstOperand, ConstScalar, ConstValue, Local, LocalData, Operand,
+    RawScalarValue, Statement, Terminator, RETURN_LOCAL,
 };
 use tidec_tir::TirTy;
 use tidec_utils::idx::Idx;
@@ -76,6 +79,11 @@ impl<'ctx> InProgressBlock<'ctx> {
 pub struct FunctionBuilder<'ctx> {
     metadata: TirBodyMetadata,
 
+    /// Optional TIR context, enabling convenience methods like
+    /// [`const_i32`](Self::const_i32) directly on the builder.
+    /// Set when created via [`BuilderCtx::function_builder`](crate::BuilderCtx::function_builder).
+    tir_ctx: Option<TirCtx<'ctx>>,
+
     /// Locals that form the return value + arguments.
     /// `ret_and_args[0]` is always the return place.
     ret_and_args: IdxVec<Local, LocalData<'ctx>>,
@@ -97,14 +105,40 @@ impl<'ctx> FunctionBuilder<'ctx> {
     /// No locals or basic blocks are created automatically – the caller must
     /// at least call [`declare_ret`](Self::declare_ret) to set the return
     /// place.
+    ///
+    /// For access to convenience methods like [`const_i32`](Self::const_i32),
+    /// use [`BuilderCtx::function_builder`](crate::BuilderCtx::function_builder)
+    /// instead, which attaches the TIR context automatically.
     pub fn new(metadata: TirBodyMetadata) -> Self {
         Self {
             metadata,
+            tir_ctx: None,
             ret_and_args: IdxVec::new(),
             locals: IdxVec::new(),
             next_local_idx: 0,
             blocks: IdxVec::new(),
         }
+    }
+
+    /// Create a new function builder with a [`TirCtx`] reference.
+    ///
+    /// The TIR context enables convenience methods such as
+    /// [`const_i32`](Self::const_i32), [`const_bool`](Self::const_bool), etc.
+    pub(crate) fn with_ctx(metadata: TirBodyMetadata, tir_ctx: TirCtx<'ctx>) -> Self {
+        Self {
+            metadata,
+            tir_ctx: Some(tir_ctx),
+            ret_and_args: IdxVec::new(),
+            locals: IdxVec::new(),
+            next_local_idx: 0,
+            blocks: IdxVec::new(),
+        }
+    }
+
+    /// Returns a reference to the [`TirCtx`], if one was provided at
+    /// construction time.
+    pub fn tir_ctx(&self) -> Option<&TirCtx<'ctx>> {
+        self.tir_ctx.as_ref()
     }
 
     // ───────────────────── Local declarations ────────────────────
@@ -273,6 +307,139 @@ impl<'ctx> FunctionBuilder<'ctx> {
         self.blocks.len()
     }
 
+    // ──────────────────── Metadata modifiers ─────────────────────
+
+    /// Mark this function as a **declaration** (external, no body).
+    ///
+    /// Declarations are used for FFI functions (e.g. `printf`, `malloc`).
+    /// When set, the codegen layer will emit a declaration instead of a
+    /// definition. A dummy unreachable block should still be added.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let mut fb = ctx.function_builder(TirBodyMetadata::function(id, "printf"));
+    /// fb.set_declaration();
+    /// fb.set_varargs();
+    /// fb.declare_ret(ctx.i32(), false);
+    /// fb.declare_arg(ctx.ptr_imm(ctx.i8()), false);
+    /// let entry = fb.create_block();
+    /// fb.set_terminator(entry, Terminator::Unreachable);
+    /// let printf_body = fb.build();
+    /// ```
+    pub fn set_declaration(&mut self) -> &mut Self {
+        self.metadata.is_declaration = true;
+        self
+    }
+
+    /// Mark this function as variadic (e.g. `printf`).
+    pub fn set_varargs(&mut self) -> &mut Self {
+        self.metadata.is_varargs = true;
+        self
+    }
+
+    /// Set the calling convention for this function.
+    pub fn set_call_conv(&mut self, cc: CallConv) -> &mut Self {
+        self.metadata.call_conv = cc;
+        self
+    }
+
+    /// Set the linkage for this function.
+    pub fn set_linkage(&mut self, linkage: Linkage) -> &mut Self {
+        self.metadata.linkage = linkage;
+        self
+    }
+
+    /// Returns a shared reference to the function metadata.
+    pub fn metadata(&self) -> &TirBodyMetadata {
+        &self.metadata
+    }
+
+    /// Returns a mutable reference to the function metadata for
+    /// arbitrary modifications.
+    pub fn metadata_mut(&mut self) -> &mut TirBodyMetadata {
+        &mut self.metadata
+    }
+
+    // ────────────────── Convenience constant methods ─────────────
+    //
+    // These methods require a `TirCtx` to have been provided at
+    // construction time (via `BuilderCtx::function_builder`). They
+    // allow writing `fb.const_i32(42)` instead of the verbose
+    // `ConstOperand::Value(ConstValue::Scalar(...), i32_ty)` pattern.
+
+    /// Create a constant `i32` operand.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `FunctionBuilder` was created without a `TirCtx`
+    /// (i.e. via `FunctionBuilder::new` instead of `BuilderCtx::function_builder`).
+    pub fn const_i32(&self, v: i32) -> Operand<'ctx> {
+        let ctx = self.expect_tir_ctx();
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u32 as u128,
+                size: NonZero::new(4).unwrap(),
+            })),
+            ctx.intern_ty(tidec_tir::ty::TirTy::I32),
+        ))
+    }
+
+    /// Create a constant `i64` operand.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no `TirCtx` was provided.
+    pub fn const_i64(&self, v: i64) -> Operand<'ctx> {
+        let ctx = self.expect_tir_ctx();
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v as u64 as u128,
+                size: NonZero::new(8).unwrap(),
+            })),
+            ctx.intern_ty(tidec_tir::ty::TirTy::I64),
+        ))
+    }
+
+    /// Create a constant `bool` operand.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no `TirCtx` was provided.
+    pub fn const_bool(&self, v: bool) -> Operand<'ctx> {
+        let ctx = self.expect_tir_ctx();
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: u128::from(v),
+                size: NonZero::new(1).unwrap(),
+            })),
+            ctx.intern_ty(tidec_tir::ty::TirTy::Bool),
+        ))
+    }
+
+    /// Create a constant `f64` operand.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no `TirCtx` was provided.
+    pub fn const_f64(&self, v: f64) -> Operand<'ctx> {
+        let ctx = self.expect_tir_ctx();
+        Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: v.to_bits() as u128,
+                size: NonZero::new(8).unwrap(),
+            })),
+            ctx.intern_ty(tidec_tir::ty::TirTy::F64),
+        ))
+    }
+
+    fn expect_tir_ctx(&self) -> &TirCtx<'ctx> {
+        self.tir_ctx.as_ref().expect(
+            "convenience constant methods require a TirCtx; \
+             use BuilderCtx::function_builder() instead of FunctionBuilder::new()",
+        )
+    }
+
     // ────────────────────── Finalization ─────────────────────────
 
     /// Consume the builder and produce the finished [`TirBody`].
@@ -282,30 +449,68 @@ impl<'ctx> FunctionBuilder<'ctx> {
     /// * Panics if the return local has not been declared.
     /// * Panics if any basic block is missing its terminator.
     pub fn build(self) -> TirBody<'ctx> {
-        assert!(
-            !self.ret_and_args.is_empty(),
-            "cannot build a TirBody without a return local (call declare_ret first)"
-        );
+        self.try_build().unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    /// Consume the builder and attempt to produce a [`TirBody`].
+    ///
+    /// Returns `Err(BuildError)` instead of panicking when validation
+    /// fails—useful for front-ends that want to report errors gracefully.
+    pub fn try_build(self) -> Result<TirBody<'ctx>, BuildError> {
+        if self.ret_and_args.is_empty() {
+            return Err(BuildError::MissingReturnLocal);
+        }
 
         let mut basic_blocks: IdxVec<BasicBlock, BasicBlockData<'ctx>> = IdxVec::new();
         for (bb_idx, ip) in self.blocks.iter_enumerated() {
-            let terminator = ip.terminator.clone().unwrap_or_else(|| {
-                panic!("basic block {:?} is missing a terminator", bb_idx);
-            });
+            let terminator = ip.terminator.clone().ok_or(BuildError::MissingTerminator {
+                block: bb_idx.idx(),
+            })?;
             basic_blocks.push(BasicBlockData {
                 statements: ip.statements.clone(),
                 terminator,
             });
         }
 
-        TirBody {
+        Ok(TirBody {
             metadata: self.metadata,
             ret_and_args: self.ret_and_args,
             locals: self.locals,
             basic_blocks,
+        })
+    }
+}
+
+/// Errors that can occur when building a [`TirBody`] via
+/// [`FunctionBuilder::try_build`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BuildError {
+    /// The return local was never declared (no call to `declare_ret`).
+    MissingReturnLocal,
+    /// A basic block is missing its terminator.
+    MissingTerminator {
+        /// The index of the block that has no terminator.
+        block: usize,
+    },
+}
+
+impl std::fmt::Display for BuildError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BuildError::MissingReturnLocal => {
+                write!(
+                    f,
+                    "cannot build a TirBody without a return local (call declare_ret first)"
+                )
+            }
+            BuildError::MissingTerminator { block } => {
+                write!(f, "basic block {block} is missing a terminator")
+            }
         }
     }
 }
+
+impl std::error::Error for BuildError {}
 
 #[cfg(test)]
 mod tests {

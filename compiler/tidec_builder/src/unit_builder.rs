@@ -159,7 +159,6 @@ mod tests {
     use tidec_tir::body::*;
     use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
     use tidec_tir::syntax::*;
-    use tidec_tir::ty;
     use tidec_utils::idx::Idx;
 
     /// Helper to create a `TirCtx` for interning types in tests.
