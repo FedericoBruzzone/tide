@@ -1479,3 +1479,79 @@ fn tir_global_indirect_initializer() {
         }
     });
 }
+
+// ---- Statement::assign and Operand::use_local helpers ----
+
+#[test]
+fn statement_assign_creates_assign_variant() {
+    with_ctx(|ctx| {
+        let i32_ty = ctx.intern_ty(ty::TirTy::I32);
+        let place = Place::from(Local::new(1));
+        let rvalue = RValue::Operand(Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 42,
+                size: NonZero::new(4).unwrap(),
+            })),
+            i32_ty,
+        )));
+        let stmt = Statement::assign(place, rvalue);
+        match &stmt {
+            Statement::Assign(inner) => {
+                let (p, rv) = inner.as_ref();
+                assert_eq!(p.local, Local::new(1));
+                assert!(p.projection.is_empty());
+                assert!(matches!(rv, RValue::Operand(_)));
+            }
+        }
+    });
+}
+
+#[test]
+fn statement_assign_preserves_place_projections() {
+    with_ctx(|ctx| {
+        let bool_ty = ctx.intern_ty(ty::TirTy::Bool);
+        let place = Place {
+            local: Local::new(2),
+            projection: vec![Projection::Field(0, bool_ty)],
+        };
+        let rvalue = RValue::Operand(Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(RawScalarValue {
+                data: 0,
+                size: NonZero::new(1).unwrap(),
+            })),
+            bool_ty,
+        )));
+        let stmt = Statement::assign(place, rvalue);
+        match &stmt {
+            Statement::Assign(inner) => {
+                let (p, _) = inner.as_ref();
+                assert_eq!(p.local, Local::new(2));
+                assert_eq!(p.projection.len(), 1);
+                assert!(matches!(p.projection[0], Projection::Field(0, _)));
+            }
+        }
+    });
+}
+
+#[test]
+fn operand_use_local_produces_use_with_empty_projection() {
+    let op = Operand::use_local(Local::new(5));
+    match &op {
+        Operand::Use(place) => {
+            assert_eq!(place.local, Local::new(5));
+            assert!(place.projection.is_empty());
+        }
+        _ => panic!("Expected Use operand"),
+    }
+}
+
+#[test]
+fn operand_use_local_return_local() {
+    let op = Operand::use_local(RETURN_LOCAL);
+    match &op {
+        Operand::Use(place) => {
+            assert_eq!(place.local, RETURN_LOCAL);
+        }
+        _ => panic!("Expected Use operand"),
+    }
+}
