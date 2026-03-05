@@ -7,7 +7,7 @@
 
 use std::num::NonZero;
 
-use tidec_builder::{BasicBlockBuilder, BuilderCtx};
+use tidec_builder::{BasicBlockBuilder, BuildError, BuilderCtx};
 use tidec_tir::body::*;
 use tidec_tir::syntax::*;
 use tidec_tir::ty::Mutability;
@@ -668,5 +668,624 @@ fn layout_computation_through_builder_ctx() {
         let unit_ty = ctx.unit();
         let layout = ctx.layout_of(unit_ty);
         assert_eq!(layout.layout.size.bytes(), 0);
+    });
+}
+
+// ===========================================================================
+// Tests for feature #1: DefId allocator
+// ===========================================================================
+
+#[test]
+fn fresh_def_id_is_monotonic() {
+    BuilderCtx::with_default(|ctx| {
+        let id0 = ctx.fresh_def_id();
+        let id1 = ctx.fresh_def_id();
+        let id2 = ctx.fresh_def_id();
+
+        assert_eq!(id0, DefId(0));
+        assert_eq!(id1, DefId(1));
+        assert_eq!(id2, DefId(2));
+    });
+}
+
+#[test]
+fn fresh_def_id_used_in_metadata_factory() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+
+        let id_a = ctx.fresh_def_id();
+        let id_b = ctx.fresh_def_id();
+
+        let meta_a = TirBodyMetadata::function(id_a, "fn_a");
+        let meta_b = TirBodyMetadata::function(id_b, "fn_b");
+
+        let mut fb_a = ctx.function_builder(meta_a);
+        fb_a.declare_ret(i32_ty, false);
+        let entry = fb_a.create_block();
+        fb_a.set_terminator(entry, Terminator::Return);
+
+        let mut fb_b = ctx.function_builder(meta_b);
+        fb_b.declare_ret(i32_ty, false);
+        let entry = fb_b.create_block();
+        fb_b.set_terminator(entry, Terminator::Return);
+
+        let body_a = fb_a.build();
+        let body_b = fb_b.build();
+
+        assert_eq!(body_a.metadata.def_id, DefId(0));
+        assert_eq!(body_b.metadata.def_id, DefId(1));
+        assert_eq!(body_a.metadata.name, "fn_a");
+        assert_eq!(body_b.metadata.name, "fn_b");
+    });
+}
+
+// ===========================================================================
+// Tests for feature #2: TirBodyMetadata::function factory
+// ===========================================================================
+
+#[test]
+fn metadata_factory_has_sensible_defaults() {
+    let meta = TirBodyMetadata::function(DefId(42), "my_func");
+
+    assert_eq!(meta.def_id, DefId(42));
+    assert_eq!(meta.name, "my_func");
+    assert!(matches!(
+        meta.kind,
+        TirBodyKind::Item(TirItemKind::Function)
+    ));
+    assert!(!meta.inlined);
+    assert!(matches!(meta.linkage, Linkage::External));
+    assert!(matches!(meta.visibility, Visibility::Default));
+    assert!(matches!(meta.unnamed_address, UnnamedAddress::None));
+    assert!(matches!(meta.call_conv, CallConv::C));
+    assert!(!meta.is_varargs);
+    assert!(!meta.is_declaration);
+}
+
+// ===========================================================================
+// Tests for feature #3: Constant constructors
+// ===========================================================================
+
+#[test]
+fn const_i32_produces_correct_operand() {
+    BuilderCtx::with_default(|ctx| {
+        let op = ctx.const_i32(42);
+        if let Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(raw)),
+            ty,
+        )) = op
+        {
+            let data = raw.data;
+            let size = raw.size.get();
+            assert_eq!(data, 42);
+            assert_eq!(size, 4);
+            assert!(ty.is_integer());
+        } else {
+            panic!("expected scalar constant");
+        }
+    });
+}
+
+#[test]
+fn const_i64_produces_correct_operand() {
+    BuilderCtx::with_default(|ctx| {
+        let op = ctx.const_i64(-1);
+        if let Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(raw)),
+            ty,
+        )) = op
+        {
+            // -1i64 as u64 = u64::MAX
+            let data = raw.data;
+            let size = raw.size.get();
+            assert_eq!(data, u64::MAX as u128);
+            assert_eq!(size, 8);
+            assert!(ty.is_integer());
+        } else {
+            panic!("expected scalar constant");
+        }
+    });
+}
+
+#[test]
+fn const_bool_produces_correct_operand() {
+    BuilderCtx::with_default(|ctx| {
+        let op_true = ctx.const_bool(true);
+        let op_false = ctx.const_bool(false);
+
+        if let Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(raw)),
+            ty,
+        )) = op_true
+        {
+            let data = raw.data;
+            let size = raw.size.get();
+            assert_eq!(data, 1);
+            assert_eq!(size, 1);
+            assert!(ty.is_bool());
+        } else {
+            panic!("expected scalar constant for true");
+        }
+
+        if let Operand::Const(ConstOperand::Value(ConstValue::Scalar(ConstScalar::Value(raw)), _)) =
+            op_false
+        {
+            let data = raw.data;
+            assert_eq!(data, 0);
+        } else {
+            panic!("expected scalar constant for false");
+        }
+    });
+}
+
+#[test]
+fn const_f64_produces_correct_operand() {
+    BuilderCtx::with_default(|ctx| {
+        let op = ctx.const_f64(3.14);
+        if let Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(raw)),
+            ty,
+        )) = op
+        {
+            let data = raw.data;
+            let size = raw.size.get();
+            assert_eq!(data, 3.14f64.to_bits() as u128);
+            assert_eq!(size, 8);
+            assert!(ty.is_floating_point());
+        } else {
+            panic!("expected scalar constant");
+        }
+    });
+}
+
+#[test]
+fn const_f32_produces_correct_operand() {
+    BuilderCtx::with_default(|ctx| {
+        let op = ctx.const_f32(2.5);
+        if let Operand::Const(ConstOperand::Value(
+            ConstValue::Scalar(ConstScalar::Value(raw)),
+            ty,
+        )) = op
+        {
+            let data = raw.data;
+            let size = raw.size.get();
+            assert_eq!(data, 2.5f32.to_bits() as u128);
+            assert_eq!(size, 4);
+            assert!(ty.is_floating_point());
+        } else {
+            panic!("expected scalar constant");
+        }
+    });
+}
+
+#[test]
+fn const_unsigned_types() {
+    BuilderCtx::with_default(|ctx| {
+        let op_u8 = ctx.const_u8(255);
+        let op_u16 = ctx.const_u16(65535);
+        let op_u32 = ctx.const_u32(0xDEAD_BEEF);
+        let op_u64 = ctx.const_u64(0xCAFE_BABE_DEAD_BEEF);
+
+        if let Operand::Const(ConstOperand::Value(ConstValue::Scalar(ConstScalar::Value(raw)), _)) =
+            op_u8
+        {
+            let data = raw.data;
+            let size = raw.size.get();
+            assert_eq!(data, 255);
+            assert_eq!(size, 1);
+        } else {
+            panic!("expected u8 constant");
+        }
+
+        if let Operand::Const(ConstOperand::Value(ConstValue::Scalar(ConstScalar::Value(raw)), _)) =
+            op_u16
+        {
+            let data = raw.data;
+            let size = raw.size.get();
+            assert_eq!(data, 65535);
+            assert_eq!(size, 2);
+        } else {
+            panic!("expected u16 constant");
+        }
+
+        if let Operand::Const(ConstOperand::Value(ConstValue::Scalar(ConstScalar::Value(raw)), _)) =
+            op_u32
+        {
+            let data = raw.data;
+            let size = raw.size.get();
+            assert_eq!(data, 0xDEAD_BEEF);
+            assert_eq!(size, 4);
+        } else {
+            panic!("expected u32 constant");
+        }
+
+        if let Operand::Const(ConstOperand::Value(ConstValue::Scalar(ConstScalar::Value(raw)), _)) =
+            op_u64
+        {
+            let data = raw.data;
+            let size = raw.size.get();
+            assert_eq!(data, 0xCAFE_BABE_DEAD_BEEF);
+            assert_eq!(size, 8);
+        } else {
+            panic!("expected u64 constant");
+        }
+    });
+}
+
+// ===========================================================================
+// Tests for feature #4: Extern declaration support
+// ===========================================================================
+
+#[test]
+fn extern_declaration_with_set_declaration() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+        let ptr_ty = ctx.ptr_imm(ctx.i8());
+
+        // Build an extern printf-like declaration using the new API.
+        let def_id = ctx.fresh_def_id();
+        let mut fb = ctx.function_builder(TirBodyMetadata::function(def_id, "printf"));
+        fb.set_declaration().set_varargs();
+        fb.declare_ret(i32_ty, false);
+        fb.declare_arg(ptr_ty, false);
+
+        // Declarations still need a dummy block.
+        let entry = fb.create_block();
+        fb.set_terminator(entry, Terminator::Unreachable);
+        let body = fb.build();
+
+        assert!(body.metadata.is_declaration);
+        assert!(body.metadata.is_varargs);
+        assert_eq!(body.metadata.name, "printf");
+    });
+}
+
+// ===========================================================================
+// Tests for feature #5: Metadata modifiers
+// ===========================================================================
+
+#[test]
+fn metadata_modifiers_chain() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+        let def_id = ctx.fresh_def_id();
+        let mut fb = ctx.function_builder(TirBodyMetadata::function(def_id, "fast_fn"));
+
+        fb.set_call_conv(CallConv::Fast)
+            .set_linkage(Linkage::Internal);
+
+        fb.declare_ret(i32_ty, false);
+        let entry = fb.create_block();
+        fb.set_terminator(entry, Terminator::Return);
+        let body = fb.build();
+
+        assert!(matches!(body.metadata.call_conv, CallConv::Fast));
+        assert!(matches!(body.metadata.linkage, Linkage::Internal));
+    });
+}
+
+#[test]
+fn metadata_and_metadata_mut_access() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+        let def_id = ctx.fresh_def_id();
+        let mut fb = ctx.function_builder(TirBodyMetadata::function(def_id, "test_fn"));
+
+        // Read access
+        assert_eq!(fb.metadata().name, "test_fn");
+
+        // Write access
+        fb.metadata_mut().inlined = true;
+
+        fb.declare_ret(i32_ty, false);
+        let entry = fb.create_block();
+        fb.set_terminator(entry, Terminator::Return);
+        let body = fb.build();
+
+        assert!(body.metadata.inlined);
+    });
+}
+
+// ===========================================================================
+// Tests for feature #6: Statement::assign & Operand::use_local
+// ===========================================================================
+
+#[test]
+fn statement_assign_helper() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+
+        let mut fb = ctx.function_builder(TirBodyMetadata::function(ctx.fresh_def_id(), "test"));
+        fb.declare_ret(i32_ty, false);
+        let arg = fb.declare_arg(i32_ty, false);
+
+        let entry = fb.create_block();
+
+        // Use the new Statement::assign helper instead of manual boxing.
+        fb.push_statement(
+            entry,
+            Statement::assign(
+                Place::from(RETURN_LOCAL),
+                RValue::Operand(Operand::use_local(arg)),
+            ),
+        );
+        fb.set_terminator(entry, Terminator::Return);
+
+        let body = fb.build();
+        assert_eq!(body.basic_blocks[BasicBlock::new(0)].statements.len(), 1);
+    });
+}
+
+#[test]
+fn operand_use_local_shorthand() {
+    let op = Operand::<'_>::use_local(Local::new(3));
+    if let Operand::Use(place) = &op {
+        assert_eq!(place.local, Local::new(3));
+        assert!(place.projection.is_empty());
+    } else {
+        panic!("expected Use variant");
+    }
+}
+
+// ===========================================================================
+// Tests for feature #7: Function operand helper
+// ===========================================================================
+
+#[test]
+fn fn_operand_creates_indirect_const() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+        let fn_ty = ctx.ptr_imm(i32_ty); // placeholder fn type
+        let def_id = ctx.fresh_def_id();
+
+        let op = ctx.fn_operand(def_id, fn_ty);
+
+        if let Operand::Const(ConstOperand::Value(ConstValue::Indirect { offset, .. }, ty)) = op {
+            assert_eq!(offset.bytes(), 0);
+            assert_eq!(ty, fn_ty);
+        } else {
+            panic!("expected indirect constant");
+        }
+    });
+}
+
+#[test]
+fn fn_operand_used_in_call() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+        let fn_ty = ctx.ptr_imm(i32_ty);
+
+        // Build a callee
+        let callee_id = ctx.fresh_def_id();
+        let callee_meta = TirBodyMetadata::function(callee_id, "callee");
+        let mut callee_fb = ctx.function_builder(callee_meta);
+        callee_fb.declare_ret(i32_ty, false);
+        callee_fb.declare_arg(i32_ty, false);
+        callee_fb.set_declaration();
+        let entry = callee_fb.create_block();
+        callee_fb.set_terminator(entry, Terminator::Unreachable);
+        let callee_body = callee_fb.build();
+
+        // Build a caller that uses fn_operand
+        let caller_id = ctx.fresh_def_id();
+        let mut caller = ctx.function_builder(TirBodyMetadata::function(caller_id, "caller"));
+        caller.declare_ret(i32_ty, false);
+        let dest = caller.declare_local(i32_ty, true);
+
+        let entry = caller.create_block();
+        let cont = caller.create_block();
+
+        let fn_op = ctx.fn_operand(callee_id, fn_ty);
+        caller.set_terminator(
+            entry,
+            Terminator::Call {
+                func: fn_op,
+                args: vec![ctx.const_i32(10)],
+                destination: Place::from(dest),
+                target: cont,
+            },
+        );
+        caller.push_assign(
+            cont,
+            Place::from(RETURN_LOCAL),
+            RValue::Operand(Operand::use_local(dest)),
+        );
+        caller.set_terminator(cont, Terminator::Return);
+
+        let caller_body = caller.build();
+
+        let mut unit = ctx.unit_builder("call_module");
+        unit.add_body(callee_body);
+        unit.add_body(caller_body);
+
+        let tir_unit = unit.build();
+        assert_eq!(tir_unit.bodies.len(), 2);
+        assert!(tir_unit.bodies.raw[0].metadata.is_declaration);
+        assert!(!tir_unit.bodies.raw[1].metadata.is_declaration);
+    });
+}
+
+// ===========================================================================
+// Tests for feature #8: FunctionBuilder holds TirCtx (convenience methods)
+// ===========================================================================
+
+#[test]
+fn function_builder_const_methods() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+
+        let mut fb = ctx.function_builder(TirBodyMetadata::function(ctx.fresh_def_id(), "test"));
+        fb.declare_ret(i32_ty, false);
+        let tmp = fb.declare_local(i32_ty, true);
+
+        let entry = fb.create_block();
+
+        // Use fb.const_i32() instead of ctx.const_i32()
+        fb.push_assign(
+            entry,
+            Place::from(tmp),
+            RValue::BinaryOp(
+                BinaryOp::Add,
+                Operand::use_local(RETURN_LOCAL),
+                fb.const_i32(42),
+            ),
+        );
+        fb.set_terminator(entry, Terminator::Return);
+
+        let body = fb.build();
+        assert_eq!(body.basic_blocks[BasicBlock::new(0)].statements.len(), 1);
+    });
+}
+
+#[test]
+fn function_builder_tir_ctx_access() {
+    BuilderCtx::with_default(|ctx| {
+        let fb = ctx.function_builder(TirBodyMetadata::function(ctx.fresh_def_id(), "test"));
+        // Created via BuilderCtx, so tir_ctx should be present.
+        assert!(fb.tir_ctx().is_some());
+    });
+}
+
+#[test]
+fn function_builder_new_has_no_tir_ctx() {
+    let fb = tidec_builder::FunctionBuilder::<'_>::new(TirBodyMetadata::function(
+        DefId(0),
+        "standalone",
+    ));
+    assert!(fb.tir_ctx().is_none());
+}
+
+// ===========================================================================
+// Tests for feature #9: Error variants instead of panics
+// ===========================================================================
+
+#[test]
+fn try_build_missing_ret_returns_error() {
+    let fb =
+        tidec_builder::FunctionBuilder::<'_>::new(TirBodyMetadata::function(DefId(0), "no_ret"));
+    let result = fb.try_build();
+    assert!(matches!(result, Err(BuildError::MissingReturnLocal)));
+}
+
+#[test]
+fn try_build_missing_terminator_returns_error() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+        let mut fb = ctx.function_builder(TirBodyMetadata::function(ctx.fresh_def_id(), "test"));
+        fb.declare_ret(i32_ty, false);
+        fb.create_block(); // no terminator set
+
+        let result = fb.try_build();
+        assert!(matches!(
+            result,
+            Err(BuildError::MissingTerminator { block: 0 })
+        ));
+    });
+}
+
+#[test]
+fn try_build_success() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+        let mut fb = ctx.function_builder(TirBodyMetadata::function(ctx.fresh_def_id(), "ok_fn"));
+        fb.declare_ret(i32_ty, false);
+        let entry = fb.create_block();
+        fb.set_terminator(entry, Terminator::Return);
+
+        let result = fb.try_build();
+        assert!(result.is_ok());
+        let body = result.unwrap();
+        assert_eq!(body.metadata.name, "ok_fn");
+    });
+}
+
+#[test]
+fn build_error_display() {
+    let err = BuildError::MissingReturnLocal;
+    assert!(err.to_string().contains("return local"));
+
+    let err = BuildError::MissingTerminator { block: 3 };
+    assert!(err.to_string().contains("3"));
+    assert!(err.to_string().contains("terminator"));
+}
+
+// ===========================================================================
+// End-to-end: build a multi-function module with the new API.
+//
+//   declare i32 @ext_pow(i32, i32)   -- extern, declaration
+//
+//   define i32 @square(i32 %x) {
+//       _2 = call @ext_pow(%x, 2)
+//       _0 = _2
+//       return
+//   }
+// ===========================================================================
+
+#[test]
+fn end_to_end_multi_function_with_new_api() {
+    BuilderCtx::with_default(|ctx| {
+        let i32_ty = ctx.i32();
+        let fn_ty = ctx.ptr_imm(i32_ty);
+
+        // -- extern i32 ext_pow(i32, i32)
+        let pow_id = ctx.fresh_def_id();
+        let mut pow_fb = ctx.function_builder(TirBodyMetadata::function(pow_id, "ext_pow"));
+        pow_fb.set_declaration();
+        pow_fb.declare_ret(i32_ty, false);
+        pow_fb.declare_arg(i32_ty, false);
+        pow_fb.declare_arg(i32_ty, false);
+        let entry = pow_fb.create_block();
+        pow_fb.set_terminator(entry, Terminator::Unreachable);
+        let pow_body = pow_fb.build();
+
+        // -- i32 square(i32 %x)
+        let square_id = ctx.fresh_def_id();
+        let mut sq_fb = ctx.function_builder(TirBodyMetadata::function(square_id, "square"));
+        sq_fb.declare_ret(i32_ty, false);
+        let x = sq_fb.declare_arg(i32_ty, false);
+        let call_dest = sq_fb.declare_local(i32_ty, true);
+
+        let entry = sq_fb.create_block();
+        let cont = sq_fb.create_block();
+
+        // entry: _2 = ext_pow(_1, 2)
+        let pow_op = ctx.fn_operand(pow_id, fn_ty);
+        sq_fb.set_terminator(
+            entry,
+            Terminator::Call {
+                func: pow_op,
+                args: vec![Operand::use_local(x), ctx.const_i32(2)],
+                destination: Place::from(call_dest),
+                target: cont,
+            },
+        );
+
+        // cont: _0 = _2; return
+        sq_fb.push_statement(
+            cont,
+            Statement::assign(
+                Place::from(RETURN_LOCAL),
+                RValue::Operand(Operand::use_local(call_dest)),
+            ),
+        );
+        sq_fb.set_terminator(cont, Terminator::Return);
+
+        let sq_body = sq_fb.build();
+
+        // -- Assemble module
+        let mut unit = ctx.unit_builder("math_module");
+        unit.add_body(pow_body);
+        unit.add_body(sq_body);
+
+        let tir_unit = unit.build();
+        assert_eq!(tir_unit.bodies.len(), 2);
+        assert!(tir_unit.bodies.raw[0].metadata.is_declaration);
+        assert_eq!(tir_unit.bodies.raw[0].metadata.name, "ext_pow");
+        assert!(!tir_unit.bodies.raw[1].metadata.is_declaration);
+        assert_eq!(tir_unit.bodies.raw[1].metadata.name, "square");
+
+        // Verify def_ids are sequential
+        assert_eq!(tir_unit.bodies.raw[0].metadata.def_id, DefId(0));
+        assert_eq!(tir_unit.bodies.raw[1].metadata.def_id, DefId(1));
     });
 }
