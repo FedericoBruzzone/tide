@@ -1178,7 +1178,9 @@ fn try_build_missing_terminator_returns_error() {
         let result = fb.try_build();
         assert!(matches!(
             result,
-            Err(BuildError::MissingTerminator { block: 0 })
+            Err(BuildError::MissingTerminator {
+                block
+            }) if block == BasicBlock::new(0)
         ));
     });
 }
@@ -1204,7 +1206,9 @@ fn build_error_display() {
     let err = BuildError::MissingReturnLocal;
     assert!(err.to_string().contains("return local"));
 
-    let err = BuildError::MissingTerminator { block: 3 };
+    let err = BuildError::MissingTerminator {
+        block: BasicBlock::new(3),
+    };
     assert!(err.to_string().contains("3"));
     assert!(err.to_string().contains("terminator"));
 }
