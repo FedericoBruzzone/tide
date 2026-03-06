@@ -47,8 +47,9 @@ use std::num::NonZero;
 use tidec_tir::body::{CallConv, Linkage, TirBody, TirBodyMetadata};
 use tidec_tir::ctx::TirCtx;
 use tidec_tir::syntax::{
-    BasicBlock, BasicBlockData, ConstOperand, ConstScalar, ConstValue, Local, LocalData, Operand,
-    RawScalarValue, Statement, Terminator, RETURN_LOCAL,
+    BasicBlock, BasicBlockData, BinaryOp, ConstOperand, ConstScalar, ConstValue, Local, LocalData,
+    Operand, Place, RValue, RawScalarValue, Statement, SwitchTargets, Terminator, UnaryOp,
+    RETURN_LOCAL,
 };
 use tidec_tir::TirTy;
 use tidec_utils::idx::Idx;
@@ -440,6 +441,165 @@ impl<'ctx> FunctionBuilder<'ctx> {
         )
     }
 
+    // ──────────────── Place / Operand helpers ────────────────────
+
+    /// Return the [`Place`] corresponding to the return local (`_0`).
+    ///
+    /// This is a convenience for `Place::from(RETURN_LOCAL)`.
+    pub fn return_place(&self) -> Place<'ctx> {
+        Place::from(RETURN_LOCAL)
+    }
+
+    /// Return a [`Place`] for the given [`Local`] (no projections).
+    ///
+    /// This is a convenience for `Place::from(local)`.
+    pub fn local_place(&self, local: Local) -> Place<'ctx> {
+        Place::from(local)
+    }
+
+    /// Create an [`Operand::Use`] that loads from the given [`Place`].
+    pub fn use_place(&self, place: &Place<'ctx>) -> Operand<'ctx> {
+        Operand::Use(place.clone())
+    }
+
+    /// Create an [`Operand::Use`] that loads from the given [`Local`].
+    ///
+    /// Shorthand for `self.use_place(&self.local_place(local))`.
+    pub fn use_local(&self, local: Local) -> Operand<'ctx> {
+        Operand::use_local(local)
+    }
+
+    // ──────────── High-level statement emission ─────────────────
+
+    /// Emit `place = operand` (wraps the operand in [`RValue::Operand`]).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `block` has not been created yet.
+    pub fn assign_operand(
+        &mut self,
+        block: BasicBlock,
+        place: Place<'ctx>,
+        operand: Operand<'ctx>,
+    ) {
+        self.push_assign(block, place, RValue::Operand(operand));
+    }
+
+    /// Emit `dest = lhs <op> rhs` with an automatically declared
+    /// temporary local of type `result_ty`.
+    ///
+    /// Returns the ([`Local`], [`Place`]) of the destination so that the
+    /// caller can build an [`Operand::Use`] from it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `block` has not been created yet.
+    pub fn assign_binary_op(
+        &mut self,
+        block: BasicBlock,
+        op: BinaryOp,
+        lhs: Operand<'ctx>,
+        rhs: Operand<'ctx>,
+        result_ty: TirTy<'ctx>,
+    ) -> (Local, Place<'ctx>) {
+        let local = self.declare_local(result_ty, false);
+        let place = Place::from(local);
+        self.push_assign(block, place.clone(), RValue::BinaryOp(op, lhs, rhs));
+        (local, place)
+    }
+
+    /// Emit `dest = <op> src` with an automatically declared temporary
+    /// local of type `result_ty`.
+    ///
+    /// Returns the ([`Local`], [`Place`]) of the destination.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `block` has not been created yet.
+    pub fn assign_unary_op(
+        &mut self,
+        block: BasicBlock,
+        op: UnaryOp,
+        src: Operand<'ctx>,
+        result_ty: TirTy<'ctx>,
+    ) -> (Local, Place<'ctx>) {
+        let local = self.declare_local(result_ty, false);
+        let place = Place::from(local);
+        self.push_assign(block, place.clone(), RValue::UnaryOp(op, src));
+        (local, place)
+    }
+
+    // ──────────── High-level terminator emission ────────────────
+
+    /// Set the terminator of `block` to [`Terminator::Return`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `block` has not been created yet.
+    pub fn emit_return(&mut self, block: BasicBlock) {
+        self.set_terminator(block, Terminator::Return);
+    }
+
+    /// Set the terminator of `block` to [`Terminator::Goto`] targeting
+    /// `target`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `block` has not been created yet.
+    pub fn emit_goto(&mut self, block: BasicBlock, target: BasicBlock) {
+        self.set_terminator(block, Terminator::Goto { target });
+    }
+
+    /// Set the terminator of `block` to a two-arm
+    /// [`Terminator::SwitchInt`] (if/else branch).
+    ///
+    /// `discr` is the discriminant operand (expected to be a boolean).
+    /// When true (`1`), control flows to `then_bb`; otherwise to `else_bb`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `block` has not been created yet.
+    pub fn emit_branch(
+        &mut self,
+        block: BasicBlock,
+        discr: Operand<'ctx>,
+        then_bb: BasicBlock,
+        else_bb: BasicBlock,
+    ) {
+        let targets = SwitchTargets::if_then(then_bb, else_bb);
+        self.set_terminator(block, Terminator::SwitchInt { discr, targets });
+    }
+
+    /// Set the terminator of `block` to a [`Terminator::Call`].
+    ///
+    /// * `func`        — the function operand (e.g. from
+    ///                    [`BuilderCtx::fn_operand`](crate::BuilderCtx::fn_operand)).
+    /// * `args`        — call arguments.
+    /// * `destination` — the [`Place`] where the return value is written.
+    /// * `target`      — the continuation block after the call returns.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `block` has not been created yet.
+    pub fn emit_call(
+        &mut self,
+        block: BasicBlock,
+        func: Operand<'ctx>,
+        args: Vec<Operand<'ctx>>,
+        destination: Place<'ctx>,
+        target: BasicBlock,
+    ) {
+        self.set_terminator(
+            block,
+            Terminator::Call {
+                func,
+                args,
+                destination,
+                target,
+            },
+        );
+    }
+
     // ────────────────────── Finalization ─────────────────────────
 
     /// Consume the builder and produce the finished [`TirBody`].
@@ -518,7 +678,7 @@ mod tests {
     use tidec_abi::target::{BackendKind, TirTarget};
     use tidec_tir::body::*;
     use tidec_tir::ctx::{EmitKind, InternCtx, TirArena, TirArgs, TirCtx};
-    use tidec_tir::syntax::*;
+
     use tidec_tir::ty;
 
     /// Helper to create a `TirCtx` for interning types in tests.

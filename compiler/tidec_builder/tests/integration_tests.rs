@@ -821,7 +821,7 @@ fn const_bool_produces_correct_operand() {
 #[test]
 fn const_f64_produces_correct_operand() {
     BuilderCtx::with_default(|ctx| {
-        let op = ctx.const_f64(f64::consts::PI);
+        let op = ctx.const_f64(std::f64::consts::PI);
         if let Operand::Const(ConstOperand::Value(
             ConstValue::Scalar(ConstScalar::Value(raw)),
             ty,
@@ -829,7 +829,7 @@ fn const_f64_produces_correct_operand() {
         {
             let data = raw.data;
             let size = raw.size.get();
-            assert_eq!(data, 3.14f64.to_bits() as u128);
+            assert_eq!(data, std::f64::consts::PI.to_bits() as u128);
             assert_eq!(size, 8);
             assert!(ty.is_floating_point());
         } else {
