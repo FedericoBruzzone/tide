@@ -808,7 +808,7 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
 
     fn get_fn_param(&self, fn_value: Self::FunctionValue, index: u32) -> Option<Self::Value> {
         let param = fn_value.get_nth_param(index)?;
-        Some(param.into())
+        Some(param)
     }
 
     // ── Memory intrinsics ────────────────────────────────────────
