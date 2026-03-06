@@ -46,3 +46,25 @@ pub use basic_block_builder::BasicBlockBuilder;
 pub use builder_ctx::BuilderCtx;
 pub use function_builder::{BuildError, FunctionBuilder};
 pub use unit_builder::UnitBuilder;
+
+// ─── Re-exports from tidec_tir ───────────────────────────────────────────────
+//
+// Downstream crates should only need to depend on
+// `tidec_builder`. We re-export the subset of `tidec_tir` types that are part
+// of the builder's public API surface.
+
+/// Re-exported TIR syntax primitives.
+pub mod syntax {
+    pub use tidec_tir::syntax::{
+        BasicBlock, BasicBlockData, BinaryOp, Local, LocalData, Operand, Place, RValue, Statement,
+        SwitchTargets, Terminator, UnaryOp, ENTRY_BLOCK, RETURN_LOCAL,
+    };
+}
+
+/// Re-exported TIR body / module types.
+pub mod body {
+    pub use tidec_tir::body::{DefId, TirBody, TirBodyMetadata, TirUnit, TirUnitMetadata};
+}
+
+/// Re-exported top-level TIR type.
+pub use tidec_tir::TirTy;
