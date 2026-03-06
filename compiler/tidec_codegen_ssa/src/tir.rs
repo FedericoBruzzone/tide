@@ -15,6 +15,7 @@ use tidec_tir::{
     body::TirBody,
     syntax::{Local, LocalData},
 };
+use tidec_utils::idx::Idx;
 use tidec_utils::index_vec::IdxVec;
 use tracing::{debug, instrument};
 
@@ -357,6 +358,33 @@ pub fn codegen_tir_body<'a, 'ctx: 'a, B: BuilderMethods<'a, 'ctx>>(
 
     // Initialize the locals in the function context.
     fn_ctx.locals = locals;
+
+    // ── Argument-store prologue ──────────────────────────────────────
+    //
+    // Function parameters declared as `mutable: true` get stack allocas
+    // (PlaceRef) during `allocate_locals`.  However, the incoming LLVM
+    // parameter values (%0, %1, …) are *not* automatically stored into
+    // those allocas.  We must emit explicit `store` instructions here so
+    // that subsequent `Operand::Use(Place::from(arg_local))` references
+    // can load the correct values.
+    //
+    // Arguments occupy locals _1, _2, … (skipping _0 which is the return
+    // place).  The LLVM parameter index is 0-based.
+    {
+        let num_args = fn_ctx.lir_body.ret_and_args.len().saturating_sub(1);
+        for arg_idx in 0..num_args {
+            let local = Local::new(arg_idx + 1); // skip _0 (return)
+            if let LocalRef::PlaceRef(place_ref) = &fn_ctx.locals[local] {
+                if let Some(param_val) = start_builder.get_fn_param(fn_value, arg_idx as u32) {
+                    let ptr = place_ref.place_val.value;
+                    let align = place_ref.place_val.align;
+                    start_builder.build_store(param_val, ptr, align);
+                }
+            }
+            // If the local is PendingOperandRef or OperandRef we skip it —
+            // immutable scalar args are handled as SSA values directly.
+        }
+    }
 
     // We can safely drop the builder now, as we will create new builders for each basic block.
     drop(start_builder);

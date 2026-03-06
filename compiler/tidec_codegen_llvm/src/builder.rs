@@ -806,6 +806,11 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
         fn_value.as_global_value().as_pointer_value().into()
     }
 
+    fn get_fn_param(&self, fn_value: Self::FunctionValue, index: u32) -> Option<Self::Value> {
+        let param = fn_value.get_nth_param(index)?;
+        Some(param.into())
+    }
+
     // ── Memory intrinsics ────────────────────────────────────────
 
     /// Copy `size` bytes from `src` to `dst` (non-overlapping).

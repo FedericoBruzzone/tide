@@ -487,6 +487,15 @@ pub trait BuilderMethods<'a, 'ctx>: Sized + CodegenBackendTypes {
     /// This is used when passing functions as arguments or storing them.
     fn fn_to_ptr(&mut self, fn_value: Self::FunctionValue) -> Self::Value;
 
+    /// Get the N-th parameter of a function value (0-based index).
+    ///
+    /// This is used during the argument-store prologue: after allocating
+    /// stack slots (allocas) for mutable function parameters, the codegen
+    /// must copy the incoming LLVM parameter values into those allocas.
+    ///
+    /// Returns `None` if `index` is out of range.
+    fn get_fn_param(&self, fn_value: Self::FunctionValue, index: u32) -> Option<Self::Value>;
+
     // ── Memory intrinsics ────────────────────────────────────────
 
     /// Copy `size` bytes from `src` to `dst` (non-overlapping).
