@@ -359,8 +359,7 @@ pub fn codegen_tir_body<'a, 'ctx: 'a, B: BuilderMethods<'a, 'ctx>>(
     // Initialize the locals in the function context.
     fn_ctx.locals = locals;
 
-    // ── Argument-store prologue ──────────────────────────────────────
-    //
+    // Argument-store prologue:
     // Function parameters declared as `mutable: true` get stack allocas
     // (PlaceRef) during `allocate_locals`.  However, the incoming LLVM
     // parameter values (%0, %1, …) are *not* automatically stored into
