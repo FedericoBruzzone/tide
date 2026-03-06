@@ -821,7 +821,7 @@ fn const_bool_produces_correct_operand() {
 #[test]
 fn const_f64_produces_correct_operand() {
     BuilderCtx::with_default(|ctx| {
-        let op = ctx.const_f64(3.14);
+        let op = ctx.const_f64(f64::consts::PI);
         if let Operand::Const(ConstOperand::Value(
             ConstValue::Scalar(ConstScalar::Value(raw)),
             ty,
