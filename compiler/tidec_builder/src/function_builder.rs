@@ -462,12 +462,12 @@ impl<'ctx> FunctionBuilder<'ctx> {
         }
 
         let mut basic_blocks: IdxVec<BasicBlock, BasicBlockData<'ctx>> = IdxVec::new();
-        for (bb_idx, ip) in self.blocks.iter_enumerated() {
-            let terminator = ip.terminator.clone().ok_or(BuildError::MissingTerminator {
-                block: bb_idx.idx(),
-            })?;
+        for (bb_idx, ip) in self.blocks.into_iter_enumerated() {
+            let terminator = ip
+                .terminator
+                .ok_or(BuildError::MissingTerminator { block: bb_idx })?;
             basic_blocks.push(BasicBlockData {
-                statements: ip.statements.clone(),
+                statements: ip.statements,
                 terminator,
             });
         }
@@ -489,8 +489,8 @@ pub enum BuildError {
     MissingReturnLocal,
     /// A basic block is missing its terminator.
     MissingTerminator {
-        /// The index of the block that has no terminator.
-        block: usize,
+        /// The block that has no terminator.
+        block: BasicBlock,
     },
 }
 
@@ -504,7 +504,7 @@ impl std::fmt::Display for BuildError {
                 )
             }
             BuildError::MissingTerminator { block } => {
-                write!(f, "basic block {block} is missing a terminator")
+                write!(f, "basic block {} is missing a terminator", block.idx())
             }
         }
     }
