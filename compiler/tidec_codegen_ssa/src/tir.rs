@@ -375,11 +375,12 @@ pub fn codegen_tir_body<'a, 'ctx: 'a, B: BuilderMethods<'a, 'ctx>>(
         for arg_idx in 0..num_args {
             let local = Local::new(arg_idx + 1); // skip _0 (return)
             if let LocalRef::PlaceRef(place_ref) = &fn_ctx.locals[local]
-                && let Some(param_val) = start_builder.get_fn_param(fn_value, arg_idx as u32) {
-                    let ptr = place_ref.place_val.value;
-                    let align = place_ref.place_val.align;
-                    start_builder.build_store(param_val, ptr, align);
-                }
+                && let Some(param_val) = start_builder.get_fn_param(fn_value, arg_idx as u32)
+            {
+                let ptr = place_ref.place_val.value;
+                let align = place_ref.place_val.align;
+                start_builder.build_store(param_val, ptr, align);
+            }
             // If the local is PendingOperandRef or OperandRef we skip it —
             // immutable scalar args are handled as SSA values directly.
         }
