@@ -18,7 +18,7 @@ use std::process::Command;
 use std::sync::Mutex;
 
 use tidec_abi::target::{BackendKind, TirTarget};
-use tidec_codegen_llvm::entry::llvm_codegen_lir_unit;
+use tidec_driver::{compile_unit_with_ctx, CompileConfig};
 use tidec_tir::body::TirUnit;
 use tidec_tir::ctx::{EmitKind, TirArena, TirArgs, TirCtx};
 
@@ -77,8 +77,10 @@ impl TestRunner {
         let original_dir = std::env::current_dir().expect("Failed to get current directory");
         std::env::set_current_dir(&self.test_dir).expect("Failed to change to test directory");
 
-        // Compile
-        llvm_codegen_lir_unit(tir_ctx, tir_unit);
+        // Compile via tidec_driver
+        let config = CompileConfig::llvm_object();
+        compile_unit_with_ctx(tir_ctx, tir_unit, &config)
+            .expect("Compilation via tidec_driver failed");
 
         // Change back
         std::env::set_current_dir(original_dir).expect("Failed to restore directory");

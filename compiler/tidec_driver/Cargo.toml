@@ -1,0 +1,17 @@
+[package]
+name = "tidec_driver"
+version = "0.1.0"
+edition = "2021"
+description = "Driver crate for the Tide compiler — orchestrates TIR compilation through configurable backends"
+authors = ["Neverlang Team"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# tidy-alphabetical-start
+tidec_abi = { path = "../tidec_abi" }
+tidec_codegen_llvm = { path = "../tidec_codegen_llvm" }
+tidec_codegen_ssa = { path = "../tidec_codegen_ssa" }
+tidec_log = { path = "../tidec_log" }
+tidec_tir = { path = "../tidec_tir" }
+tracing = "0.1.41"
+# tidy-alphabetical-end

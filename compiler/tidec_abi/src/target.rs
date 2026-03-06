@@ -69,7 +69,7 @@ impl TirTarget {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 /// The backend kind for code generation.
 ///
 /// This enum represents the different backends that can be used for code generation.

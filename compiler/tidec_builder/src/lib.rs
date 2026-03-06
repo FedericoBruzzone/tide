@@ -56,14 +56,18 @@ pub use unit_builder::UnitBuilder;
 /// Re-exported TIR syntax primitives.
 pub mod syntax {
     pub use tidec_tir::syntax::{
-        BasicBlock, BasicBlockData, BinaryOp, Local, LocalData, Operand, Place, RValue, Statement,
-        SwitchTargets, Terminator, UnaryOp, ENTRY_BLOCK, RETURN_LOCAL,
+        BasicBlock, BasicBlockData, BinaryOp, ConstOperand, ConstScalar, ConstValue, Local,
+        LocalData, Operand, Place, RValue, RawScalarValue, Statement, SwitchTargets, Terminator,
+        UnaryOp, ENTRY_BLOCK, RETURN_LOCAL,
     };
 }
 
 /// Re-exported TIR body / module types.
 pub mod body {
-    pub use tidec_tir::body::{DefId, TirBody, TirBodyMetadata, TirUnit, TirUnitMetadata};
+    pub use tidec_tir::body::{
+        CallConv, DefId, Linkage, TirBody, TirBodyKind, TirBodyMetadata, TirGlobal, TirItemKind,
+        TirUnit, TirUnitMetadata, UnnamedAddress, Visibility,
+    };
 }
 
 /// Re-exported top-level TIR type.

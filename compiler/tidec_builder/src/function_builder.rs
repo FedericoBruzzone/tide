@@ -572,8 +572,7 @@ impl<'ctx> FunctionBuilder<'ctx> {
 
     /// Set the terminator of `block` to a [`Terminator::Call`].
     ///
-    /// * `func`        — the function operand (e.g. from
-    ///                    [`BuilderCtx::fn_operand`](crate::BuilderCtx::fn_operand)).
+    /// * `func`        — the function operand (e.g. from [`BuilderCtx::fn_operand`](crate::BuilderCtx::fn_operand)).
     /// * `args`        — call arguments.
     /// * `destination` — the [`Place`] where the return value is written.
     /// * `target`      — the continuation block after the call returns.
