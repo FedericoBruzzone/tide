@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # tidy-alphabetical-start
-inkwell = { version = "0.7.1", features = ["llvm20-1"] }
+inkwell = { version = "0.8.0", features = ["llvm20-1"] }
 tidec_abi = { path = "../tidec_abi" }
 tidec_codegen_ssa = { path = "../tidec_codegen_ssa" }
 tidec_tir = { path = "../tidec_tir" }
