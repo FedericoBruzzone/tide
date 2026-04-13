@@ -1,3 +1,4 @@
+use std::num::NonZeroU32;
 use std::ops::Deref;
 
 use crate::context::CodegenCtx;
@@ -505,11 +506,15 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
                 // because it cannot be cast to a float 32; LLVM rejects such casts because of
                 // "invalid cast opcode". Consequently, the `llval.const_truncate_or_bit_cast(llty.into_int_type()).into()` method
                 // also would fail due to llty being a float type.
-                let base_int = self.ctx.ll_context.custom_width_int_type(bitsize as u32);
+                let base_int = self
+                    .ctx
+                    .ll_context
+                    .custom_width_int_type(NonZeroU32::new(bitsize as u32).unwrap());
 
                 // Split the 128-bit integer into two 64-bit words for LLVM
                 let words = [(bits & u64::MAX as u128) as u64, (bits >> 64) as u64];
-                let llval = base_int.const_int_arbitrary_precision(&words);
+                let llval_int = base_int.expect("Failed to create custom width integer type");
+                let llval = llval_int.const_int_arbitrary_precision(&words);
 
                 if let Primitive::Pointer(_) = be_repr {
                     llval.const_to_pointer(llty.into_pointer_type()).into()
@@ -660,10 +665,11 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
         // inkwell's build_int_compare only accepts IntValue, but LLVM's icmp
         // also works on pointer types.  Convert pointers to an integer type
         // whose width matches the target's pointer size.
-        let ptr_int_ty =
-            self.ctx.ll_context.custom_width_int_type(
-                self.ctx.lir_ctx.target().data_layout.pointer_size.bits() as u32,
-            );
+        let ptr_int_ty_res = self.ctx.ll_context.custom_width_int_type(
+            NonZeroU32::new(self.ctx.lir_ctx.target().data_layout.pointer_size.bits() as u32)
+                .unwrap(),
+        );
+        let ptr_int_ty = ptr_int_ty_res.expect("Failed to create pointer-width integer type for icmp");
         let lhs_int = if lhs.is_pointer_value() {
             self.ll_builder
                 .build_ptr_to_int(lhs.into_pointer_value(), ptr_int_ty, "ptrtoint")

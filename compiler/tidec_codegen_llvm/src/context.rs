@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::num::NonZeroU32;
 use std::ops::Deref;
 use std::path::Path;
 use std::process::Command;
@@ -286,9 +287,10 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
         };
 
         let bits = raw.to_bits(ty_layout.size);
-        let base_int = self.ll_context.custom_width_int_type(bitsize as u32);
+        let base_int = self.ll_context.custom_width_int_type(NonZeroU32::new(bitsize as u32).unwrap());
         let words = [(bits & u64::MAX as u128) as u64, (bits >> 64) as u64];
-        let llval = base_int.const_int_arbitrary_precision(&words);
+        let llval_int = base_int.expect("Failed to create custom width integer type");
+        let llval = llval_int.const_int_arbitrary_precision(&words);
 
         if let Primitive::Pointer(_) = be_repr {
             llval.const_to_pointer(llty.into_pointer_type()).into()
