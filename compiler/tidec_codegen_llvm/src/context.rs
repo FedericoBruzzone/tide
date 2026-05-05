@@ -287,7 +287,9 @@ impl<'ctx, 'll> CodegenCtx<'ctx, 'll> {
         };
 
         let bits = raw.to_bits(ty_layout.size);
-        let base_int = self.ll_context.custom_width_int_type(NonZeroU32::new(bitsize as u32).unwrap());
+        let base_int = self
+            .ll_context
+            .custom_width_int_type(NonZeroU32::new(bitsize as u32).unwrap());
         let words = [(bits & u64::MAX as u128) as u64, (bits >> 64) as u64];
         let llval_int = base_int.expect("Failed to create custom width integer type");
         let llval = llval_int.const_int_arbitrary_precision(&words);

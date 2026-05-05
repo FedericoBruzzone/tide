@@ -669,7 +669,8 @@ impl<'a, 'll, 'ctx> BuilderMethods<'a, 'ctx> for CodegenBuilder<'a, 'll, 'ctx> {
             NonZeroU32::new(self.ctx.lir_ctx.target().data_layout.pointer_size.bits() as u32)
                 .unwrap(),
         );
-        let ptr_int_ty = ptr_int_ty_res.expect("Failed to create pointer-width integer type for icmp");
+        let ptr_int_ty =
+            ptr_int_ty_res.expect("Failed to create pointer-width integer type for icmp");
         let lhs_int = if lhs.is_pointer_value() {
             self.ll_builder
                 .build_ptr_to_int(lhs.into_pointer_value(), ptr_int_ty, "ptrtoint")
